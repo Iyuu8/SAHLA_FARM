@@ -1,0 +1,52 @@
+esphome:
+  name: farm-camera
+  friendly_name: farm-camera
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# This tells the ESP32 to use its extra memory for the camera
+psram:
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "/0Nm0AEuZLe+sp0O7DlI+hmzEwUnMFSW/vckTxUVh/o="
+
+ota:
+  - platform: esphome
+    password: "3199bb9a5f909f53135c7a4e50a6308f"
+
+wifi:
+  ssid: "realme C33"
+  password: "305f320ebc28"
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Farm-Camera Fallback Hotspot"
+    password: "sQkLsNJbao6D"
+
+captive_portal:
+
+esp32_camera:
+  external_clock:
+    pin: GPIO0
+    frequency: 20MHz
+  i2c_pins:
+    sda: GPIO26
+    scl: GPIO27
+  data_pins: [GPIO5, GPIO18, GPIO19, GPIO21, GPIO36, GPIO39, GPIO34, GPIO35]
+  vsync_pin: GPIO25
+  href_pin: GPIO23
+  pixel_clock_pin: GPIO22
+  power_down_pin: GPIO32
+  name: "Farm Camera Feed"
+  resolution: 800x600
+  jpeg_quality: 12
+  max_framerate: 5 fps
+  
