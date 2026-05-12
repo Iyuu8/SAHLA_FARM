@@ -1,0 +1,1476 @@
+views:
+  - type: sections
+    sections:
+      - type: grid
+        grid_options:
+          columns: 12
+        cards:
+          - type: markdown
+            content: |
+              <table role="presentation" width="100%" height="90">
+                <tr valign="middle">
+                  <td width="70" valign="middle" align="center">
+                    <img src="/local/sahla_logo.svg" width="54" height="54" alt="SAHLA logo"/>
+                  </td>
+                  <td valign="middle">
+                    <strong>SAHLA FARM</strong><br/>
+                    {{ now().strftime('%a, %d %B %Y') }}
+                  </td>
+                </tr>
+              </table>
+            card_mod:
+              style:
+                .: |
+                  ha-card {
+                    background: linear-gradient(145deg, #f0f9f0, #ffffff);
+                    border-radius: 24px !important;
+                    border: none !important;
+                    border-left: 6px solid #4caf50 !important;
+                    box-shadow: 0 10px 25px rgba(76,175,80,0.1) !important;
+                    height: 110px !important;
+                    overflow: hidden !important;
+                  }
+                ha-card$: |
+                  .card-content {
+                    height: 100% !important;
+                    padding: 0 20px !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    box-sizing: border-box !important;
+                  }
+
+                  ha-markdown {
+                    width: 100%;
+                    padding: 0 !important;
+                  }
+
+                  ha-markdown p {
+                    margin: 0 !important;
+                  }
+
+                  /* IMPORTANT: target by src attribute for reliability */
+                  ha-markdown img[src="/local/sahla_logo.svg"] {
+                    width: 54px !important;
+                    height: 54px !important;
+                    display: block !important;
+                    opacity: 1 !important;
+
+                    /* white -> green (#2e7d32) approximation */
+                    filter: brightness(0) saturate(100%)
+                            invert(36%) sepia(32%) saturate(1058%)
+                            hue-rotate(85deg) brightness(94%) contrast(90%) !important;
+                  }
+
+                  ha-markdown strong {
+                    font-size: 22px !important;
+                    font-weight: 800 !important;
+                    color: #2e7d32 !important;
+                    text-transform: uppercase !important;
+                    line-height: 1.2 !important;
+                    display: block !important;
+                  }
+            view_layout:
+              grid-column: 1 / 7
+            grid_options:
+              columns: 15
+              rows: auto
+          - type: custom:weather-forecast-card
+            entity: weather.forecast_home
+            name: Farm Weather
+            show_current: true
+            show_forecast: false
+            view_layout:
+              grid-column: 7 / 15
+            card_mod:
+              style: |
+                ha-card {
+                  background: linear-gradient(145deg, #f0f7ff, #ffffff);
+                  border-radius: 24px;
+                  border: none;
+                  box-shadow: 0 10px 25px rgba(33, 150, 243, 0.1);
+                  padding: 16px !important;
+                  display: flex;
+                  flex-direction: column;
+                  justify-content: center;
+                  height: 110px; /* Fixed height to match your other cards */
+                  border-left: 6px solid #2196f3;
+                }
+                /* Making the Weather Icon Much Bigger */
+                :host {
+                  --mdc-icon-size: 60px;
+                }
+                .main-info {
+                  flex-direction: row !important;
+                  align-items: center !important;
+                  justify-content: space-between !important;
+                }
+                /* Styling the Temperature */
+                .temp {
+                  font-size: 32px !important;
+                  font-weight: 800 !important;
+                  color: #1a73e8;
+                  margin-left: auto;
+                }
+                /* Fixing the text overlap and styling */
+                .name-state {
+                  margin-left: 20px;
+                  text-align: left;
+                }
+                .state {
+                  font-size: 24px !important;
+                  font-weight: 600 !important;
+                  text-transform: capitalize;
+                }
+                .name {
+                  font-size: 14px !important;
+                  opacity: 0.7;
+                }
+          - type: custom:bubble-card
+            card_type: button
+            button_type: name
+            name: Notifications
+            icon: mdi:bell-badge-outline
+            button_action:
+              tap_action:
+                action: navigate
+                navigation_path: '#n8n-popup'
+            styles: |
+              ha-card {
+                border-radius: 16px !important;
+                cursor: pointer !important;
+                height: 50px !important;
+                box-shadow: none !important;
+                width: 100%;
+                margin:auto;
+              }
+            sub_button:
+              main: []
+              bottom: []
+            slider_fill_orientation: left
+            slider_value_position: right
+            grid_options:
+              rows: 1
+              columns: 3
+            tap_action:
+              action: navigate
+              navigation_path: '#n8n-popup'
+        column_span: 4
+      - cards:
+          - type: custom:mushroom-title-card
+            title: Graphs
+            title_size: 20px
+            alignment: left
+            card_mod:
+              style: |
+                ha-card {
+                  background: linear-gradient(145deg, #f5f5f5, #ffffff);
+                  border: 1px solid rgba(33,150,243,0.2);
+                  border-top: 3px solid #2196f3;
+                  border-radius: 16px;
+                  padding: 8px 16px;
+                  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+                  margin-top: 10px;
+                  margin-bottom: 5px;
+                }
+                .title {
+                  font-weight: 600 !important;
+                  color: #1976d2 !important;
+                }
+          - type: conditional
+            conditions:
+              - entity: input_select.selected_sensor
+                state: Temperature
+            card:
+              type: custom:mini-graph-card
+              entities:
+                - entity: sensor.farm_temperature
+                  name: Temperature
+              line_color: '#ff5722'
+              line_width: 3
+              hours_to_show: 2
+              points_per_hour: 60
+              smoothing: true
+              height: 200
+              show:
+                name: true
+                icon: true
+                state: true
+                legend: false
+                fill: fade
+                points: false
+                labels: false
+                extrema: true
+              align_state: center
+              font_size: 75
+              card_mod:
+                style: |
+                  ha-card {
+                    border-radius: 20px;
+                    background: linear-gradient(145deg, #fff3f0, #ffffff);
+                    border: none;
+                    box-shadow: 0 10px 25px rgba(255, 87, 34, 0.1);
+                  }
+                  .header { padding: 16px 16px 0; }
+                  .state__amount { font-weight: 700; color: #ff5722; }
+          - type: conditional
+            conditions:
+              - entity: input_select.selected_sensor
+                state: Humidity
+            card:
+              type: custom:mini-graph-card
+              entities:
+                - entity: sensor.farm_humidity
+                  name: Air Humidity
+              line_color: '#2196f3'
+              line_width: 3
+              hours_to_show: 2
+              points_per_hour: 60
+              smoothing: true
+              height: 200
+              show:
+                name: true
+                icon: true
+                state: true
+                fill: fade
+                points: false
+                extrema: true
+              align_state: center
+              font_size: 75
+              card_mod:
+                style: |
+                  ha-card {
+                    border-radius: 20px;
+                    background: linear-gradient(145deg, #f0f7ff, #ffffff);
+                    border: none;
+                    box-shadow: 0 10px 25px rgba(33, 150, 243, 0.1);
+                  }
+                  .state__amount { font-weight: 700; color: #2196f3; }
+          - type: conditional
+            conditions:
+              - entity: input_select.selected_sensor
+                state: Soil Moisture
+            card:
+              type: custom:mini-graph-card
+              entities:
+                - entity: sensor.farm_soil_moisture
+                  name: Soil Moisture
+              line_color: '#4caf50'
+              line_width: 3
+              hours_to_show: 2
+              points_per_hour: 60
+              smoothing: true
+              height: 200
+              show:
+                name: true
+                state: true
+                fill: fade
+                points: false
+              align_state: center
+              font_size: 75
+              card_mod:
+                style: |
+                  ha-card {
+                    border-radius: 20px;
+                    background: linear-gradient(145deg, #f2faf2, #ffffff);
+                    border: none;
+                    box-shadow: 0 10px 25px rgba(76, 175, 80, 0.1);
+                  }
+                  .state__amount { font-weight: 700; color: #388e3c; }
+          - type: conditional
+            conditions:
+              - entity: input_select.selected_sensor
+                state: Light
+            card:
+              type: custom:mini-graph-card
+              entities:
+                - entity: sensor.farm_ambient_light
+                  name: Light Level
+              line_color: '#ffc107'
+              line_width: 3
+              hours_to_show: 2
+              points_per_hour: 60
+              smoothing: true
+              height: 200
+              show:
+                name: true
+                state: true
+                fill: fade
+                points: false
+              align_state: center
+              font_size: 75
+              card_mod:
+                style: |
+                  ha-card {
+                    border-radius: 20px;
+                    background: linear-gradient(145deg, #fffcf0, #ffffff);
+                    border: none;
+                    box-shadow: 0 10px 25px rgba(255, 193, 7, 0.1);
+                  }
+                  .state__amount { font-weight: 700; color: #ffb300; }
+      - type: grid
+        grid_options: null
+        columns: 12
+        cards:
+          - type: custom:mushroom-title-card
+            title: Crop Management
+            title_size: 20px
+            alignment: left
+            card_mod:
+              style: |
+                ha-card {
+                  background: white;
+                  border-radius: 16px;
+                  padding: 8px 16px;
+                  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+                  border-left: 4px solid #4caf50;
+                  margin-top: 10px;
+                  margin-bottom: 5px;
+                }
+                .title {
+                  font-weight: 600 !important;
+                  color: #2e7d32 !important;
+                }
+          - type: custom:mushroom-select-card
+            entity: input_select.crop_type
+            name: Current Crop
+            icon: mdi:sprout
+            icon_color: green
+            fill_container: true
+            card_mod:
+              style: |
+                ha-card {
+                  background: linear-gradient(145deg, #f1f8e9, #ffffff);
+                  border: 1px solid rgba(76,175,80,0.2);
+                  border-top: 3px solid #4caf50;
+                  border-radius: 16px;
+                  margin:auto;
+                }
+            grid_options:
+              columns: 6
+              rows: 2
+          - type: custom:bubble-card
+            card_type: button
+            button_type: name
+            name: Add Crop
+            icon: mdi:plus-circle
+            button_action:
+              tap_action:
+                action: navigate
+                navigation_path: '#add-crop'
+            styles: |
+              ha-card {
+                border-radius: 16px !important;
+                cursor: pointer !important;
+                height: 50px !important;
+                box-shadow: none !important;
+                width: 100%;
+                margin:auto;
+              }
+            sub_button:
+              main: []
+              bottom: []
+            slider_fill_orientation: left
+            slider_value_position: right
+            grid_options:
+              rows: 2
+              columns: 6
+          - type: custom:mushroom-select-card
+            entity: input_select.growth_stage
+            icon: mdi:sprout
+            icon_color: green
+            fill_container: true
+            name: Growth stage
+            card_mod:
+              style: |
+                ha-card {
+                  background: linear-gradient(145deg, #f1f8e9, #ffffff);
+                  border: 1px solid rgba(76,175,80,0.2);
+                  border-top: 3px solid #4caf50;
+                  border-radius: 16px;
+                  margin:auto;
+                }
+            grid_options:
+              columns: 6
+              rows: 2
+          - type: custom:mushroom-select-card
+            entity: input_select.priority_mode
+            name: Control mode
+            icon: mdi:autorenew
+            icon_color: blue
+            fill_container: true
+            card_mod:
+              style: |
+                ha-card {
+                  background: linear-gradient(145deg, #e3f2fd, #d4e9ff);
+                  border: 1px solid rgba(25, 118, 210, 0.25);
+                  border-top: 3px solid #1976d2;
+                  border-radius: 16px;
+                  box-shadow: 0 4px 12px rgba(20, 70, 120, 0.1);
+                  min-width: 180px;
+                  margin:auto;
+                }
+            grid_options:
+              columns: 6
+              rows: 2
+        column_span: 1
+      - type: grid
+        grid_options:
+          columns: 12
+        cards:
+          - type: custom:mushroom-title-card
+            title: Active Alerts
+            title_size: 20px
+            view_layout:
+              grid-column: 1 / 13
+            card_mod:
+              style: |
+                ha-card {
+                  background: white;
+                  border-left: 4px solid #f44336;
+                  border-radius: 16px;
+                  padding: 8px 16px;
+                  margin-bottom: 10px;
+                  box-shadow: 0 2px 8px rgba(244,67,54,0.1);
+                }
+                .title {
+                  font-weight: 600 !important;
+                  color: #c62828 !important;
+                }
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: input_boolean.high_temperature_detected
+                state: 'on'
+            card:
+              type: custom:mushroom-template-card
+              primary: High Temperature
+              icon: mdi:thermometer-alert
+              icon_color: red
+              card_mod:
+                style: |
+                  ha-card {
+                    background: #ffebee;
+                    border-left: 4px solid #f44336;
+                  }
+            view_layout:
+              grid-column: span 6
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: input_boolean.frost_risk
+                state: 'on'
+            card:
+              type: custom:mushroom-template-card
+              primary: Frost Risk (low temperature)
+              icon: mdi:snowflake-alert
+              icon_color: blue
+              card_mod:
+                style: |
+                  ha-card {
+                    background: #e3f2fd;
+                    border-left: 4px solid #2196f3;
+                  }
+            view_layout:
+              grid-column: span 6
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: input_boolean.low_soil_moisture
+                state: 'on'
+            card:
+              type: custom:mushroom-template-card
+              primary: Low Soil Moisture
+              icon: mdi:water-alert
+              icon_color: brown
+              card_mod:
+                style: |
+                  ha-card {
+                    background: #efebe9;
+                    border-left: 4px solid #795548;
+                  }
+            view_layout:
+              grid-column: span 6
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: input_boolean.overwatering
+                state: 'on'
+            card:
+              type: custom:mushroom-template-card
+              primary: Overwatering (High Soil Moisture)
+              icon: mdi:water-plus
+              icon_color: light-blue
+              card_mod:
+                style: |
+                  ha-card {
+                    background: #e1f5fe;
+                    border-left: 4px solid #03a9f4;
+                  }
+            view_layout:
+              grid-column: span 6
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: input_boolean.high_humidity_level
+                state: 'on'
+            card:
+              type: custom:mushroom-template-card
+              primary: High humidity level
+              icon: mdi:water-percent-alert
+              icon_color: light-blue
+              card_mod:
+                style: |
+                  ha-card {
+                    background: #e1f5fe;
+                    border-radius: 12px;
+                  }
+            view_layout:
+              grid-column: span 6
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: input_boolean.strong_wind
+                state: 'on'
+            card:
+              type: custom:mushroom-template-card
+              primary: Strong Wind
+              icon: mdi:weather-windy
+              icon_color: teal
+              card_mod:
+                style: |
+                  ha-card {
+                    background: #e0f2f1;
+                    border-radius: 12px;
+                  }
+            view_layout:
+              grid-column: span 6
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: input_boolean.excessive_sunlight
+                state: 'on'
+            card:
+              type: custom:mushroom-template-card
+              primary: Excessive Sunlight
+              icon: mdi:weather-sunny-alert
+              icon_color: orange
+              card_mod:
+                style: |
+                  ha-card {
+                      background: #fff3e0;
+                      border-radius: 12px;
+                    }
+            view_layout:
+              grid-column: span 6
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: input_boolean.heavy_rainfall
+                state: 'on'
+            card:
+              type: custom:mushroom-template-card
+              primary: Heavy Rainfall
+              icon: mdi:weather-pouring
+              icon_color: blue
+              card_mod:
+                style: |
+                  ha-card {
+                      background: #b3e5fc;
+                      border-radius: 12px;
+                    }
+            view_layout:
+              grid-column: span 6
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: input_boolean.insufficient_sunlight
+                state: 'on'
+            card:
+              type: custom:mushroom-template-card
+              primary: Insufficient Sunlight
+              icon: mdi:weather-sunny-off
+              features_position: bottom
+              icon-color: indigo
+              card_mod:
+                style: |
+                  ha-card {
+                    background: #e8eaf6;
+                    border-left: 4px solid #3f51b5;
+                  }
+            view_layout:
+              grid-column: span 6
+          - type: markdown
+            view_layout:
+              grid-column: 1 / 13
+            grid_options:
+              rows: auto
+              columns: 12
+            content: >
+              ### 💡 General
+
+              {% set recommendation =
+              states('input_text.general_recommendation') %}
+
+              {% if recommendation and recommendation != 'None' and
+              recommendation != '' %}
+
+              {{ recommendation | replace('• ', '\n• ') | replace('\n', '  \n')
+              }}
+
+              {% else %}
+
+              *No recommendations available*
+
+              {% endif %}
+            card_mod:
+              style: |
+                ha-card {
+                  background: #fff8e1;
+                  border-left: 4px solid #ffc107;
+                  border-radius: 16px;
+                  padding: 20px;
+                  box-shadow: 0 2px 8px rgba(255,193,7,0.2);
+                  font-family: 'Arial', sans-serif;
+                  width: 100%;
+                }
+                h3 {
+                  color: #b45f06 !important;
+                  font-size: 18px !important;
+                  font-weight: 600 !important;
+                  margin-top: 0 !important;
+                  margin-bottom: 15px !important;
+                }
+                p, div, .markdown-body {
+                  font-size: 15px !important;
+                  color: #333333 !important;
+                  line-height: 1.6 !important;
+                  background: white;
+                  padding: 15px;
+                  border-radius: 8px;
+                  border: 1px solid rgba(255,193,7,0.3);
+                  white-space: pre-wrap !important;
+                  word-break: break-word !important;
+                  overflow-wrap: break-word !important;
+                  max-width: 100%;
+                }
+        column_span: 1
+      - type: grid
+        cards:
+          - type: custom:mushroom-title-card
+            title: Actuators
+            icon: mdi:engine
+            icon_color: purple
+            title_size: 20px
+            alignment: left
+            card_mod:
+              style: |
+                ha-card {
+                  background: white;
+                  border: none;
+                  border-radius: 12px 12px 0 0;
+                  padding: 12px 16px 8px 16px;
+                  box-shadow: none;
+                  border-bottom: 3px solid #9c27b0;
+                  margin-top: 10px;
+                  margin-bottom: 0;
+                }
+                .title {
+                  font-weight: 600 !important;
+                  color: #333333 !important;
+                }
+            grid_options:
+              columns: 36
+              rows: auto
+        column_span: 4
+      - type: grid
+        cards:
+          - type: custom:mushroom-entity-card
+            tap_action:
+              action: toggle
+            icon: mdi:pump
+            icon_color: blue
+            name: Water Pump
+            grid_options:
+              columns: 6
+              rows: auto
+            entity: switch.pump_status
+            card_mod:
+              style:
+                mushroom-shape-icon$: |
+                  .shape {
+                    {# ========== USER CONFIG ========== #}
+                    {# true = number mode, false = state mode #}
+                    {% set use_number      = false %}
+
+                    {# STATE MODE SETTINGS #}
+                    {% set state_entity    = 'switch.pump_status' %}
+                    {% set active_value    = 'on' %}
+
+                    {# OPTIONAL: NUMBER MODE SETTINGS #}
+                    {% set number_entity   = 'sensor.plug_power' %}
+                    {# '>' '<' '=' '>=' '<=' #}
+                    {% set number_operator = '>' %}
+                    {% set threshold       = 0.0 %}
+                    {# ========== END USER CONFIG ====== #}
+
+                    {# 1. STATE CHECK #}
+                    {% set is_on = states(state_entity) == active_value %}
+
+                    {# 2. ANIMATION CHECK #}
+                    {% set should_animate = false %}
+                    {% if is_on %}
+                      {% if use_number %}
+                        {% set num = states(number_entity) | float(0) %}
+                        {% if number_operator == '>' %}
+                          {% set should_animate = (num > threshold) %}
+                        {% elif number_operator == '<' %}
+                          {% set should_animate = (num < threshold) %}
+                        {% elif number_operator == '=' %}
+                          {% set should_animate = (num == threshold) %}
+                        {% elif number_operator == '>=' %}
+                          {% set should_animate = (num >= threshold) %}
+                        {% elif number_operator == '<=' %}
+                          {% set should_animate = (num <= threshold) %}
+                        {% endif %}
+                      {% else %}
+                        {% set should_animate = true %}
+                      {% endif %}
+                    {% endif %}
+
+                    /* --- STYLING --- */
+
+                    {% if is_on %}
+                      /* DEVICE IS ON */
+                      
+                      {% if should_animate %}
+                        /* ACTIVELY PUMPING */
+                        /* 1. Internal Impeller Spin */
+                        --impeller-spin: hydro-spin 0.8s linear infinite;
+                        /* 2. Motor Vibration */
+                        --pump-rumble: motor-shake 0.1s ease-in-out infinite alternate;
+                        /* 3. Water Pressure Waves */
+                        --pressure-flow: flow-ripple 1.5s ease-out infinite;
+                        --effect-display: block;
+                      {% else %}
+                        /* IDLE (Water present but not moving) */
+                        --impeller-spin: none;
+                        --pump-rumble: none;
+                        --pressure-flow: none;
+                        --effect-display: none;
+                      {% endif %}
+
+                    {% else %}
+                      /* DEVICE IS OFF */
+                      --impeller-spin: none;
+                      --pump-rumble: none;
+                      --pressure-flow: none;
+                      --effect-display: none;
+                    {% endif %}
+
+                    border-radius: 50%;
+                    position: relative;
+                    overflow: visible !important;
+                    transform: translateZ(0);
+                    
+                    /* Shake the housing */
+                    animation: var(--pump-rumble);
+                  }
+
+                  /* THE INTERNAL IMPELLER (Spinning Gradient) */
+                  .shape::before {
+                    content: '';
+                    display: var(--effect-display);
+                    position: absolute;
+                    inset: 0;
+                    border-radius: 50%;
+                    /* Creates a spinning "fan blade" look inside the color */
+                    background: conic-gradient(
+                      from 0deg,
+                      rgba(255, 255, 255, 0) 0%,
+                      rgba(255, 255, 255, 0.4) 25%,
+                      rgba(255, 255, 255, 0) 50%,
+                      rgba(255, 255, 255, 0.4) 75%,
+                      rgba(255, 255, 255, 0) 100%
+                    );
+                    animation: var(--impeller-spin);
+                    mix-blend-mode: overlay;
+                    z-index: 1; /* Inside the shape */
+                  }
+
+                  /* THE PRESSURE WAVES (Outer flow) */
+                  .shape::after {
+                    content: '';
+                    display: var(--effect-display);
+                    position: absolute;
+                    inset: 0;
+                    border-radius: 50%;
+                    border: 2px solid rgba(var(--rgb-{{ config.icon_color }}), 0.6);
+                    opacity: 0;
+                    animation: var(--pressure-flow);
+                    z-index: -1; /* Outside the shape */
+                  }
+
+                  /* --- ANIMATIONS --- */
+
+                  /* Rapid Impeller Rotation */
+                  @keyframes hydro-spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                  }
+
+                  /* High-frequency mechanical vibration */
+                  @keyframes motor-shake {
+                    0% { transform: translate(0.5px, 0.5px); }
+                    100% { transform: translate(-0.5px, -0.5px); }
+                  }
+
+                  /* Expanding Water Ripples */
+                  @keyframes flow-ripple {
+                    0% {
+                      transform: scale(1);
+                      opacity: 0.8;
+                      border-width: 4px;
+                    }
+                    100% {
+                      transform: scale(1.6);
+                      opacity: 0;
+                      border-width: 0px;
+                    }
+                  }
+                .: |
+                  mushroom-shape-icon {
+                    --icon-size: 65px;
+                    display: flex;
+                    margin: -17px 0 10px -17px !important;
+                    padding-right: 10px;
+                    z-index: 1;
+                  }
+                  ha-card {
+                    clip-path: inset(0 0 0 0 round var(--ha-card-border-radius, 12px));
+                  }
+          - type: custom:mushroom-template-card
+            entity: input_boolean.pump_control_mode
+            primary: Pump control mode
+            secondary: >-
+              {% if is_state('input_boolean.pump_control_mode', 'on') %} Manual
+              control {% else %} Auto mode {% endif %}
+            icon: >-
+              {% if is_state('input_boolean.pump_control_mode', 'on') %} mdi:fan
+              {% else %} mdi:fan-auto {% endif %}
+            tap_action:
+              action: toggle
+            grid_options:
+              columns: 6
+              rows: auto
+            color: >-
+              {% if is_state('input_boolean.pump_control_mode', 'on') %} blue {%
+              else %} grey {% endif %}
+            features_position: bottom
+            card_mod:
+              style: |
+                ha-card {
+                  background: {% if is_state('input_boolean.pump_control_mode', 'on') %}#e3f2fd{% else %}#f5f5f5{% endif %};
+                  border: 1px solid {% if is_state('input_boolean.pump_control_mode', 'on') %}rgba(33,150,243,0.3){% else %}rgba(0,0,0,0.08){% endif %};
+                  border-top: 3px solid {% if is_state('input_boolean.pump_control_mode', 'on') %}#2196f3{% else %}#9e9e9e{% endif %};
+                  border-radius: 16px;
+                  padding: 12px
+                  height: 100%
+                }
+        column_span: 1
+      - type: grid
+        cards:
+          - type: custom:mushroom-entity-card
+            tap_action:
+              action: toggle
+            icon: mdi:fan
+            icon_color: blue
+            name: Fan
+            grid_options:
+              columns: 6
+              rows: auto
+            entity: input_boolean.fan_status
+            card_mod:
+              style:
+                mushroom-shape-icon$: |
+                  .shape {
+                    {# ========== USER CONFIG ========== #}
+                    {# true = number mode, false = state mode #}
+                    {% set use_number      = false %}
+
+                    {# STATE MODE SETTINGS #}
+                    {% set state_entity    = 'input_boolean.fan_status' %}
+                    {% set active_value    = 'on' %}
+
+                    {# OPTIONAL: NUMBER MODE SETTINGS #}
+                    {% set number_entity   = 'sensor.plug_power' %}
+                    
+                    {# '>' '<' '=' '>=' '<=' #}
+                    {% set number_operator = '>' %}
+                    
+                    {% set threshold       = 0.0 %}
+                    {# ========== END USER CONFIG ====== #}
+
+                    {# ======== TRIGGER DECISION LOGIC ======== #}
+                    {% if use_number %}
+                      {% set num = states(number_entity) | float(0) %}
+                      {% if number_operator == '>' %}
+                        {% set trigger_active = (num > threshold) %}
+                      {% elif number_operator == '<' %}
+                        {% set trigger_active = (num < threshold) %}
+                      {% elif number_operator == '=' %}
+                        {% set trigger_active = (num == threshold) %}
+                      {% elif number_operator == '>=' %}
+                        {% set trigger_active = (num >= threshold) %}
+                      {% elif number_operator == '<=' %}
+                        {% set trigger_active = (num <= threshold) %}
+                      {% else %}
+                        {% set trigger_active = false %}
+                      {% endif %}
+                    {% else %}
+                      {% set trigger_active = (states(state_entity) == active_value) %}
+                    {% endif %}
+                    {# =========== END TRIGGER LOGIC =========== #}
+
+                    {% if trigger_active %}
+                      {# Fan speed logic based on THIS card's entity #}
+                      {% if is_state(config.entity, 'on') %}
+                        --shape-animation: fan-turbine 0.5s linear infinite;
+                        opacity: 1;
+                      {% elif is_state(config.entity, 'medium') %}
+                        --shape-animation: fan-turbine 0.8s linear infinite;
+                        opacity: 1;
+                      {% elif is_state(config.entity, 'low') %}
+                        --shape-animation: fan-turbine 1.2s linear infinite;
+                        opacity: 1;
+                      {% else %}
+                        --shape-animation: fan-rock 2.4s ease-in-out infinite;
+                        opacity: 0.7;
+                      {% endif %}
+                    {% else %}
+                      --shape-animation: none;
+                      opacity: 0.7;
+                    {% endif %}
+
+                    transform-origin: 50% 50%;
+                    position: relative;
+                    box-shadow:
+                      0 0 0 0 rgba(var(--rgb-{{ config.icon_color }}), 0.6),
+                      0 0 0 6px rgba(var(--rgb-{{ config.icon_color }}), 0.08),
+                      0 0 18px 0 rgba(var(--rgb-{{ config.icon_color }}), 0.7);
+                  }
+
+                  @keyframes fan-turbine {
+                    0% {
+                      transform: rotate(0deg) scale(1);
+                      filter: drop-shadow(0 0 3px rgba(var(--rgb-{{ config.icon_color }}), 0.9));
+                    }
+                    25% {
+                      transform: rotate(90deg) scale(1.02);
+                    }
+                    50% {
+                      transform: rotate(180deg) scale(1.04);
+                      filter: drop-shadow(0 0 8px rgba(var(--rgb-{{ config.icon_color }}), 1));
+                    }
+                    75% {
+                      transform: rotate(270deg) scale(1.02);
+                    }
+                    100% {
+                      transform: rotate(360deg) scale(1);
+                      filter: drop-shadow(0 0 3px rgba(var(--rgb-{{ config.icon_color }}), 0.9));
+                    }
+                  }
+
+                  @keyframes fan-rock {
+                    0%   { transform: rotate(-4deg); }
+                    50%  { transform: rotate(4deg); }
+                    100% { transform: rotate(-4deg); }
+                  }
+                .: |
+                  mushroom-shape-icon {
+                    --icon-size: 65px;
+                    display: flex;
+                    margin: -18px 0 10px -20px !important;
+                    padding-right: 10px;
+                  }
+                  ha-card {
+                    clip-path: inset(0 0 0 0 round var(--ha-card-border-radius, 12px));
+                  }
+          - type: custom:mushroom-template-card
+            entity: input_boolean.fan_control_mode
+            primary: Fan control mode
+            secondary: >-
+              {% if is_state('input_boolean.fan_control_mode', 'on') %} Manual
+              control {% else %} Auto mode {% endif %}
+            icon: >-
+              {% if is_state('input_boolean.fan_control_mode', 'on') %} mdi:fan
+              {% else %} mdi:fan-auto {% endif %}
+            tap_action:
+              action: toggle
+            grid_options:
+              columns: 6
+              rows: auto
+            color: >-
+              {% if is_state('input_boolean.fan_control_mode', 'on') %} blue {%
+              else %} grey {% endif %}
+            features_position: bottom
+            card_mod:
+              style: |
+                ha-card {
+                  background: {% if is_state('input_boolean.fan_control_mode', 'on') %}#e3f2fd{% else %}#f5f5f5{% endif %};
+                  border: 1px solid {% if is_state('input_boolean.fan_control_mode', 'on') %}rgba(33,150,243,0.3){% else %}rgba(0,0,0,0.08){% endif %};
+                  border-top: 3px solid {% if is_state('input_boolean.fan_control_mode', 'on') %}#2196f3{% else %}#9e9e9e{% endif %};
+                  border-radius: 16px;
+                  padding: 12px;
+                }
+        column_span: 1
+      - type: grid
+        cards:
+          - type: custom:mushroom-title-card
+            title: Sensors
+            title_size: 20px
+            alignment: left
+            card_mod:
+              style: |
+                ha-card {
+                  background: white;
+                  border-left: 4px solid #ff9800;
+                  border-radius: 16px;
+                  padding: 8px 16px;
+                  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+                  margin-top: 10px;
+                  margin-bottom: 5px;
+                }
+                .title {
+                  font-weight: 600 !important;
+                  color: #333333 !important;
+                }
+        column_span: 4
+      - type: grid
+        grid_options:
+          columns: 12
+          rows: auto
+        cards:
+          - type: custom:mushroom-template-card
+            primary: Temperature
+            secondary: |-
+              {% set temp = states('sensor.farm_temperature') | float(0) %}
+              {{ temp }} °C
+
+              {% if temp > 30 %}
+                 Hot
+              {% elif temp > 25 %}
+                 Warm
+              {% elif temp > 18 %}
+                 Perfect
+              {% elif temp > 10 %}
+                 Cool
+              {% else %}
+                 Cold
+              {% endif %}
+            icon: mdi:thermometer
+            entity: sensor.farm_temperature
+            tap_action:
+              action: perform-action
+              perform_action: input_select.select_option
+              target:
+                entity_id: input_select.selected_sensor
+              data:
+                option: Temperature
+            double_tap_action:
+              action: more-info
+            color: |-
+              {% set temp = states('sensor.farm_temperature') | float(0) %}
+              {% if temp > 30 %}red
+              {% elif temp > 25 %}deep-orange
+              {% elif temp > 18 %}orange
+              {% elif temp > 10 %}light-blue
+              {% else %}blue
+              {% endif %}
+            features_position: bottom
+            grid_options:
+              columns: 6
+              rows: 2
+            icon_tap_action:
+              action: more-info
+            card_mod:
+              style: |
+                {% set temp = states('sensor.farm_temperature') | float(0) %}
+                ha-card {
+                  background: linear-gradient(145deg, #fff3f0, #ffffff);
+                  border: 1px solid {% if temp > 30 %}rgba(244,67,54,0.2){% elif temp > 25 %}rgba(255,112,67,0.2){% elif temp > 18 %}rgba(255,152,0,0.2){% elif temp > 10 %}rgba(3,169,244,0.2){% else %}rgba(33,150,243,0.2){% endif %};
+                  border-top: 3px solid {% if temp > 30 %}#f44336{% elif temp > 25 %}#ff7043{% elif temp > 18 %}#ff9800{% elif temp > 10 %}#03a9f4{% else %}#2196f3{% endif %};
+                  border-radius: 16px;
+                  box-shadow: 0 4px 16px {% if temp > 30 %}rgba(244,67,54,0.15){% elif temp > 25 %}rgba(255,112,67,0.15){% elif temp > 18 %}rgba(255,152,0,0.15){% elif temp > 10 %}rgba(3,169,244,0.15){% else %}rgba(33,150,243,0.15){% endif %};
+                  
+                  /* Responsive styling */
+                  width: 100%;
+                  height: 100%;
+                  min-height: 100px;
+                  padding: clamp(12px, 2.5vw, 20px);
+                  display: flex;
+                  flex-direction: column;
+                  justify-content: center;
+                  transition: all 0.3s ease;
+                }
+
+                /* Responsive typography */
+                .primary {
+                  font-size: clamp(16px, 3.5vw, 20px) !important;
+                  font-weight: 600;
+                  margin-bottom: 4px;
+                }
+
+                .secondary {
+                  font-size: clamp(13px, 2.8vw, 16px) !important;
+                  line-height: 1.5;
+                  white-space: pre-line;
+                }
+
+                /* Mobile optimization */
+                @media (max-width: 600px) {
+                  ha-card {
+                    min-height: 120px;
+                    padding: 12px;
+                  }
+                }
+          - type: custom:mushroom-template-card
+            primary: Humidity
+            secondary: |-
+              {% set hum = states('sensor.farm_humidity') | float(0) %}
+              {{ hum }}% 
+
+              {% if hum < 30 %}
+                  Dry
+              {% elif hum < 50 %}
+                  Moderate
+              {% elif hum < 70 %}
+                  Ideal
+              {% else %}
+                  Too Wet
+              {% endif %}
+            icon: mdi:water-outline
+            entity: sensor.farm_humidity
+            tap_action:
+              action: perform-action
+              perform_action: input_select.select_option
+              target:
+                entity_id: input_select.selected_sensor
+              data:
+                option: Humidity
+            double_tap_action:
+              action: more-info
+            color: |-
+              {% set hum = states('sensor.farm_humidity') | float(0) %}
+              {% if hum > 70 %}
+                blue
+              {% elif hum > 50 %}
+                light-blue
+              {% elif hum > 30 %}
+                cyan
+              {% else %}
+                teal
+              {% endif %}
+            features_position: bottom
+            grid_options:
+              columns: 6
+              rows: 2
+            card_mod:
+              style: >
+                {% set hum = states('sensor.farm_humidity') | float(0) %}
+
+                ha-card {
+                  background: linear-gradient(145deg, #f0f7ff, #ffffff);
+                  border: 1px solid {% if hum > 70 %}rgba(33,150,243,0.2){% elif hum > 50 %}rgba(3,169,244,0.2){% elif hum > 30 %}rgba(0,188,212,0.2){% else %}rgba(0,150,136,0.2){% endif %};
+                  border-top: 3px solid {% if hum > 70 %}#2196f3{% elif hum > 50 %}#03a9f4{% elif hum > 30 %}#00bcd4{% else %}#009688{% endif %};
+                  border-radius: 16px;
+                  box-shadow: 0 4px 16px {% if hum > 70 %}rgba(33,150,243,0.15){% elif hum > 50 %}rgba(3,169,244,0.15){% elif hum > 30 %}rgba(0,188,212,0.15){% else %}rgba(0,150,136,0.15){% endif %};
+                  width: 100%;
+                  height: 100%;
+                  min-height: 100px;
+                  padding: clamp(12px, 2.5vw, 20px);
+                  display: flex;
+                  flex-direction: column;
+                  justify-content: center;
+                  transition: all 0.3s ease;
+                }
+
+                .primary { font-size: clamp(16px, 3.5vw, 20px) !important;
+                font-weight: 600; margin-bottom: 4px; }
+
+                .secondary { font-size: clamp(13px, 2.8vw, 16px) !important;
+                line-height: 1.5; white-space: pre-line; }
+          - type: custom:mushroom-template-card
+            primary: Soil Moisture
+            secondary: |-
+              {% set soil = states('sensor.farm_soil_moisture') | float(0) %}
+              {{ soil }}% 
+
+              {% if soil < 20 %}
+                  Critical - Water Now!
+              {% elif soil < 40 %}
+                  Dry - Water Soon
+              {% elif soil < 60 %}
+                  Moderate
+              {% elif soil < 80 %}
+                  Ideal
+              {% else %}
+                  Too Wet 
+              {% endif %}
+            icon: mdi:water-percent
+            entity: sensor.farm_soil_moisture
+            tap_action:
+              action: perform-action
+              perform_action: input_select.select_option
+              target:
+                entity_id: input_select.selected_sensor
+              data:
+                option: Soil Moisture
+            double_tap_action:
+              action: more-info
+            color: |-
+              {% set soil = states('sensor.farm_soil_moisture') | float(0) %}
+              {% if soil > 80 %}
+                blue
+              {% elif soil > 60 %}
+                green
+              {% elif soil > 40 %}
+                light-green
+              {% elif soil > 20 %}
+                lime
+              {% else %}
+                brown
+              {% endif %}
+            features_position: bottom
+            grid_options:
+              columns: 6
+              rows: 2
+            card_mod:
+              style: >
+                {% set soil = states('sensor.farm_soil_moisture') | float(0) %}
+
+                ha-card {
+                  background: linear-gradient(145deg, #f2f9f2, #ffffff);
+                  border: 1px solid {% if soil > 80 %}rgba(33,150,243,0.2){% elif soil > 60 %}rgba(67,160,71,0.2){% elif soil > 40 %}rgba(139,195,74,0.2){% elif soil > 20 %}rgba(205,220,57,0.2){% else %}rgba(121,85,72,0.2){% endif %};
+                  border-top: 3px solid {% if soil > 80 %}#2196f3{% elif soil > 60 %}#43a047{% elif soil > 40 %}#8bc34a{% elif soil > 20 %}#cddc39{% else %}#795548{% endif %};
+                  border-radius: 16px;
+                  box-shadow: 0 4px 16px {% if soil > 80 %}rgba(33,150,243,0.15){% elif soil > 60 %}rgba(67,160,71,0.15){% elif soil > 40 %}rgba(139,195,74,0.15){% elif soil > 20 %}rgba(205,220,57,0.15){% else %}rgba(121,85,72,0.15){% endif %};
+                  width: 100%;
+                  height: 100%;
+                  min-height: 100px;
+                  padding: clamp(12px, 2.5vw, 20px);
+                  display: flex;
+                  flex-direction: column;
+                  justify-content: center;
+                  transition: all 0.3s ease;
+                }
+
+                .primary { font-size: clamp(16px, 3.5vw, 20px) !important;
+                font-weight: 600; margin-bottom: 4px; }
+
+                .secondary { font-size: clamp(13px, 2.8vw, 16px) !important;
+                line-height: 1.5; white-space: pre-line; }
+          - type: custom:mushroom-template-card
+            primary: Light
+            secondary: >-
+              {% set luminosity = states('sensor.farm_ambient_light') | float(0)
+              %}
+
+              {{ luminosity }} lux
+
+
+              {% if luminosity < 200 %}
+                  Dark
+              {% elif luminosity < 400 %}
+                  Dim
+              {% elif luminosity < 600 %}
+                  Cloudy
+              {% elif luminosity < 800 %}
+                  Bright
+              {% else %}
+                  Very Bright
+              {% endif %}
+            icon: mdi:brightness-7
+            entity: sensor.farm_ambient_light
+            tap_action:
+              action: perform-action
+              perform_action: input_select.select_option
+              target:
+                entity_id: input_select.selected_sensor
+              data:
+                option: Light
+            double_tap_action:
+              action: more-info
+            color: >-
+              {% set luminosity = states('sensor.farm_ambient_light') | float(0)
+              %}
+
+              {% if luminosity > 800 %}
+                amber
+              {% elif luminosity > 400 %}
+                yellow
+              {% else %}
+                blue
+              {% endif %}
+            features_position: bottom
+            grid_options:
+              columns: 6
+              rows: 2
+            card_mod:
+              style: >
+                {% set luminosity = states('sensor.farm_ambient_light') |
+                float(0) %}
+
+                ha-card {
+                  background: linear-gradient(145deg, #fff9e6, #ffffff);
+                  border: 1px solid {% if luminosity > 800 %}rgba(255,152,0,0.2){% elif luminosity > 400 %}rgba(255,193,7,0.2){% else %}rgba(33,150,243,0.2){% endif %};
+                  border-top: 3px solid {% if luminosity > 800 %}#ff9800{% elif luminosity > 400 %}#ffc107{% else %}#2196f3{% endif %};
+                  border-radius: 16px;
+                  box-shadow: 0 4px 16px {% if luminosity > 800 %}rgba(255,152,0,0.15){% elif luminosity > 400 %}rgba(255,193,7,0.15){% else %}rgba(33,150,243,0.15){% endif %};
+                  width: 100%;
+                  height: 100%;
+                  min-height: 100px;
+                  padding: clamp(12px, 2.5vw, 20px);
+                  display: flex;
+                  flex-direction: column;
+                  justify-content: center;
+                  transition: all 0.3s ease;
+                }
+
+                .primary { font-size: clamp(16px, 3.5vw, 20px) !important;
+                font-weight: 600; margin-bottom: 4px; }
+
+                .secondary { font-size: clamp(13px, 2.8vw, 16px) !important;
+                line-height: 1.5; white-space: pre-line; }
+        column_span: 4
+      - type: grid
+        cards:
+          - type: vertical-stack
+            cards:
+              - type: custom:bubble-card
+                card_type: pop-up
+                hash: '#add-crop'
+                name: Add New Crop
+                icon: mdi:sprout
+                width_desktop: 350px
+                bg_color: '#ffffff'
+                bg_opacity: 100
+                styles: |
+                  ha-card {
+                    border-radius: 24px !important;
+                    border-left: 4px solid #ffc107 !important;
+                    box-shadow: none !important;  /* ← Removed shadow */
+                  }
+                  .bubble-header {
+                  }
+                button_type: name
+                sub_button:
+                  main: []
+                  bottom: []
+                slider_fill_orientation: left
+                slider_value_position: right
+              - type: custom:mushroom-entity-card
+                entity: input_text.new_crop
+                name: Crop Name
+                icon: mdi:sprout
+                fill_container: true
+                card_mod:
+                  style: |
+                    ha-card {
+                      border: 1px solid rgba(255,193,7,0.2) !important;
+                      border-radius: 12px !important;
+                      margin-bottom: 8px;
+                    }
+              - type: button
+                name: ADD CROP
+                tap_action:
+                  action: call-service
+                  service: script.add_crop_to_list
+                style: |
+                  ha-button {
+                    {% if states('input_text.new_crop') | trim == '' %}
+                    background: #e0e0e0;
+                    color: #9e9e9e;
+                    {% else %}
+                    background: linear-gradient(145deg, #ffc107, #ffb300);
+                    color: white;
+                    {% endif %}
+                    width: 100%;
+                    border-radius: 8px;
+                    font-weight: bold;
+                    height: 48px;
+                    cursor: {% if states('input_text.new_crop') | trim == '' %}not-allowed{% else %}pointer{% endif %};
+                  }
+                confirmation:
+                  text: >-
+                    {% if states('input_text.new_crop') | trim == '' %}
+                    EMPTY_ERROR {% endif %}
+          - type: vertical-stack
+            cards:
+              - type: custom:bubble-card
+                card_type: pop-up
+                hash: '#n8n-popup'
+                name: 🤖 n8n Assistant
+                icon: mdi:robot
+                width_desktop: 450px
+                bg_color: '#ffffff'
+                styles: |
+                  ha-card {
+                    border-radius: 24px !important;
+                  }
+                button_type: name
+                sub_button:
+                  main: []
+                  bottom: []
+                slider_fill_orientation: left
+                slider_value_position: right
+              - type: markdown
+                content: |
+                  ### 🛎️ Notifications
+
+                  {% if states('input_text.notifications') | trim != '' %}
+                  > **{{ states('input_text.notifications') }}**
+                  {% else %}
+                  No new notifications.
+                  {% endif %}
+                card_mod:
+                  style: |
+                    ha-card {
+                      background: #e3f2fd;
+                      padding: 16px;
+                    }
+              - type: markdown
+                content: |
+                  ### ⚙️ Suggested Actions
+
+                  {% if states('input_text.suggested_actions') | trim != '' %}
+                  {{ states('input_text.suggested_actions') }}
+                  {% else %}
+                  No action required.
+                  {% endif %}
+                card_mod:
+                  style: |
+                    ha-card {
+                      background: #f1f8e9;
+                      padding: 16px;
+                    }
+              - type: button
+                name: Clear Notifications
+                entity: script.clear_notifications
+                show_state: false
+                show_icon: false
+                tap_action:
+                  action: toggle
+                card_mod:
+                  style: |
+                    ha-card {
+                      background: #f5f5f5;
+                      color: #333;
+                      width: 100%;
+                      border-radius: 8px;
+                      height: 48px;
+                      display: flex;
+                      align-items: center;
+                      justify-content: center;
+                    }
+    header: {}
+    badges: []
