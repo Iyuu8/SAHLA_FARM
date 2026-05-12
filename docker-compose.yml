@@ -1,0 +1,66 @@
+version: "3.8"
+
+services:
+
+  # ── Home Assistant ──────────────────────────────────────────
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    container_name: homeassistant
+    restart: always
+    privileged: true
+    network_mode: host          # Required for device discovery (mDNS, UPnP)
+    environment:
+      - TZ=Africa/Algiers
+    volumes:
+      - ./homeassistant:/config
+      - /run/dbus:/run/dbus:ro  # Bluetooth support
+
+  # ── n8n ────────────────────────────────────────────────────
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: always
+    ports:
+      - "5678:5678"
+    environment:
+      - TZ=Africa/Algiers
+      - GENERIC_TIMEZONE=Africa/Algiers
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - N8N_SECURE_COOKIE=false
+      - WEBHOOK_URL=http://raspberrypi.local:5678/
+    volumes:
+      - ./n8n:/home/node/.n8n
+
+  # ── Mosquitto (MQTT broker) ─────────────────────────────────
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: mosquitto
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: always
+    ports:
+      - "1883:1883"   # MQTT
+      - "9001:9001"   # WebSockets (optional)
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+
+  esphome:
+    container_name: esphome
+    image: ghcr.io/esphome/esphome
+    volumes:
+      - ./esphome_config:/config
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "6052:6052"
+    restart: always
+    network_mode: host
+    # This allows the container to access the Pi's USB ports for flashing
+    privileged: true
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
