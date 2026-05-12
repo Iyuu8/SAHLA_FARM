@@ -1,0 +1,3 @@
+[submodule "webAppFront"]
+	path = webAppFront
+	url = https://github.com/Iyuu8/SAHLA_FARM_FRONT.git
