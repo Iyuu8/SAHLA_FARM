@@ -1,0 +1,752 @@
+{
+  "name": "Image_Processing",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -928,
+        16
+      ],
+      "id": "b1ff5a18-4bd3-4e99-9bcb-009c9181ac0d",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://{{ $('Code in JavaScript1').item.json.adr }}:8123/api/services/camera/snapshot",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJlMzg5YTNiYzg0OWE0ODRiYmI2Y2M0ZjhjNDE4ZmM5YSIsImlhdCI6MTc3NDkxMTA1MywiZXhwIjoyMDkwMjcxMDUzfQ.ntEjr2TFoCOHg-yOv6bBqikvTayGDVbqwtZ6zkCAu8Q"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"entity_id\": \"camera.farm_camera_farm_camera_feed\",\n  \"filename\": \"/config/www/camera_snapshot.jpg\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        16,
+        0
+      ],
+      "id": "7507e751-5d2a-4a1c-a1ac-3c11ce804f7d",
+      "name": "HTTP Request",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "amount": 2
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        160,
+        0
+      ],
+      "id": "171ede8e-d40f-488e-aa69-4ca9dafc13ae",
+      "name": "Wait",
+      "webhookId": "7ff39018-6cc1-427c-bdd0-046e3fede025"
+    },
+    {
+      "parameters": {
+        "url": "=http://{{ $('Code in JavaScript1').item.json.adr }}:8123/local/camera_snapshot.jpg",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        368,
+        0
+      ],
+      "id": "ad5242fd-7250-4f67-b2c4-f5934d03e5aa",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "Examples of desired outputs:\n\n1. Image shows: A clear, brightly lit greenhouse. Plants are standing straight up and are perfectly still. Soil and leaves are dry. No rain.\nOutput: Clear, brightly lit environment with distinct shadows; plants are perfectly still with no motion; surfaces are dry with no rain observed. || {\"rain_detected\":false,\"water_on_leaves\":false,\"cloud_cover\":\"low\",\"lighting_level\":\"high\",\"shadows_present\":true,\"plant_motion_detected\":false,\"motion_intensity\":null,\"confidence_rain\":100,\"confidence_wind:\"100\"}\n\n2. Image shows: Pitch black night. The background and sky are completely unseeable. However, the camera's flash clearly catches heavy raindrops falling right in front of the lens. Plant movement cannot be seen.\nOutput: Background and lighting are completely obscured by darkness; however, raindrops are explicitly visible falling in the foreground; plant motion cannot be determined. || {\"rain_detected\":true,\"water_on_leaves\":null,\"cloud_cover\":null,\"lighting_level\":null,\"shadows_present\":null,\"plant_motion_detected\":null,\"motion_intensity\":null,\"confidence_rain\":90,\"confidence_wind\":85}\n\n3. Image shows: Overcast gray day. No rain is falling, leaves look dry. The plants are bent heavily to one side and branches show severe motion blur. \nOutput: Overcast sky with medium lighting and no distinct shadows; no rain or wetness observed; plants are bent heavily to one side with significant motion blur indicating strong wind. || {\"rain_detected\":false,\"water_on_leaves\":false,\"cloud_cover\":\"high\",\"lighting_level\":\"medium\",\"shadows_present\":false,\"plant_motion_detected\":true,\"motion_intensity\":\"high\",\"confidence_rain\":95,\"confidence_wind\":10}\n\n4. Image shows: The camera lens is covered in thick mud or condensation. The entire image is just a blurry, gray smudge. Nothing can be identified.\nOutput: Image is completely obscured by lens obstruction or severe blur; no environmental features, plants, or weather conditions can be identified. || {\"rain_detected\":null,\"water_on_leaves\":null,\"cloud_cover\":null,\"lighting_level\":null,\"shadows_present\":null,\"plant_motion_detected\":null,\"motion_intensity\":null,\"confidence_rain\":15,\"confidence_wind\":10}\n\nTask: Analyze the provided image and produce the output in the exact format shown above. Strictly report only what is visible for rain/water, use logical deduction for motion/light, and use null for anything you cannot clearly see. Remember your confidence score only reflects your certainty about rain and wind. Output a single string, summary first, then JSON, separated by \" || \". Do not include any newline characters.",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "HumanMessagePromptTemplate",
+              "messageType": "imageBinary"
+            },
+            {
+              "message": "You are the Visual Validation Agent for the SAHLA Box smart agricultural system.  Your task is to analyze a farm image from an ESP32-CAM and evaluate the current observable weather and environmental conditions.   Context: Your analysis directly influences autonomous hardware actuators. Rain and water features control irrigation pumps, while plant motion features act as a visual anemometer to control ventilation fans. Your \"confidence_rain\", \"confidence_wind\" scores determines if the system trusts your output or schedules a re-evaluation.   Your output must be a single string with two sections, separated by the exact characters \" \n\n \".  The first section is a descriptive, human-readable summary of the observable scene.  The second section is a compact JSON object containing specific features.  The JSON MUST contain these exact keys: - rain_detected: boolean \n null (Are raindrops visually falling?) - water_on_leaves: boolean \n null (Are leaves or soil visibly wet/shiny?) - cloud_cover: \"low\" \n \"medium\" \n \"high\" \n null (How much of the sky is covered?) - lighting_level: \"low\" \n \"medium\" \n \"high\" \n null (Overall illumination. Deduction allowed.) - shadows_present: boolean \n null (Are distinct shadows visible? Deduction allowed.) - plant_motion_detected: boolean \n null (Is there evidence of wind? You MUST use deduction here, such as motion blur or bent plants.) - motion_intensity: \"low\" \n \"moderate\" \n \"high\" \n null (If motion is detected, how intense is it? If not detected, set to 0, if not sure set it to null.) - confidence_rain: integer 0-100 - confidence_wind: integer 0-100 (Read the \"HOW CONFIDENCE WORKS\" section below for strict scoring rules).  HOW CONFIDENCE WORKS (CRITICAL): The confidence attribute is the system's safety valve. It dictates whether the final decision agent acts immediately or aborts to schedule a re-evaluation.  This score MUST STRICTLY reflect your certainty about the presence or absence of RAIN and WIND only.  Do NOT lower the confidence score just because lighting or clouds are unobservable (null). - High Confidence (80-100): You are absolutely sure about the rain and wind status. Examples: A clear day where plants are still and dry (100). Or, a pitch-black night (clouds/lighting are null) but the camera flash clearly shows raindrops falling (90+). - Low Confidence (<50): The image quality makes it impossible to confirm rain or wind. Examples: The lens is covered in thick fog, mud, or extreme blur, turning the image into an unrecognizable smudge. A score below 50 tells the system, \"Do not touch the actuators, the image is useless, wait and try again later.\"  CRITICAL RULES FOR OBSERVATION vs. ASSUMPTION: 1. STRICT OBSERVATION FOR WATER/RAIN: You must ONLY report water and rain if explicitly visible. Do NOT make assumptions (e.g., do not assume it rained just because it is cloudy). 2. DEDUCTION ALLOWED FOR MOTION/LIGHT: Because it is a static image, you are PERMITTED and EXPECTED to make logical deductions for `plant_motion_detected`, `motion_intensity`, `lighting_level`, and `shadows_present` (e.g., assuming wind because plants are leaning). 3. USE NULL FOR THE UNKNOWN: If a feature is completely obscured, cut off, or too dark to determine, you MUST set its value to `null`. Do not guess wildly. 4. ISOLATED VISIBILITY: If only one feature is visible (e.g., you clearly see rain, but everything else is pitch black), set `rain_detected` to true and the obscured features to `null`. 5. FORMAT: The output must be exactly one single line string. No newline characters (\\n) are allowed.  6. Use the separator \" \n\n \" exactly once."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        624,
+        0
+      ],
+      "id": "2c58f812-0c0b-400c-a197-7e9d31e44ad1",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "=meta-llama/llama-4-scout-17b-16e-instruct",
+          "mode": "id"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        624,
+        224
+      ],
+      "id": "057757fc-2308-4012-8781-eaacc5693f7e",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "ITWeyDaNmjNdnOof",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const newItems = [];\n\nfor (const item of $input.all()) {\n  try {\n    // 1. Get the raw string from the AI Agent\n    const rawOutput = item.json.output || item.json.text || \"\";\n    \n    // 2. Split into the Summary and the JSON parts\n    const parts = rawOutput.split('||');\n    \n    // Clean up the summary\n    let summaryText = parts[0].trim();\n    summaryText = summaryText.replace(/^\"|\"$/g, '').trim(); \n    \n    // 3. Clean up the JSON string using Regex\n    let jsonString = parts[1].trim();\n    const jsonMatch = jsonString.match(/\\{[\\s\\S]*\\}/);\n    if (jsonMatch) {\n      jsonString = jsonMatch[0];\n    }\n    \n    // 4. Parse the extracted string into a real JSON object\n    const parsedData = JSON.parse(jsonString);\n    \n    // Extract specific confidence scores to put at root level\n    const confRain = parsedData.confidence_rain !== undefined ? parsedData.confidence_rain : null;\n    const confWind = parsedData.confidence_wind !== undefined ? parsedData.confidence_wind : null;\n    \n    // Remove them from the features object so they don't appear twice\n    delete parsedData.confidence_rain;\n    delete parsedData.confidence_wind;\n    delete parsedData.confidence; // Clean up generic confidence if it exists\n    \n    // 5. Build the final structure\n    newItems.push({\n      json: {\n        summary: summaryText,\n        features: parsedData,\n        confidence_rain: confRain,\n        confidence_wind: confWind\n      }\n    });\n    \n  } catch (error) {\n    // Failsafe structure\n    newItems.push({\n      json: {\n        summary: \"AI output parsing failed: \" + error.message,\n        features: {\n          rain_detected: null,\n          water_on_leaves: null,\n          cloud_cover: null,\n          lighting_level: null,\n          shadows_present: null,\n          plant_motion_detected: null,\n          motion_intensity: null\n        },\n        confidence_rain: null,\n        confidence_wind: null\n      }\n    });\n  }\n}\n\nreturn newItems;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        976,
+        0
+      ],
+      "id": "d0c58e7c-68a1-4ffc-aa67-41942062b3fd",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.all()[0].json;\n\nfunction extractActuator(actuator) {\n  return {\n    type: actuator.type,\n    classification: actuator.classification ?? null,\n    control_mode: actuator.control_mode,\n    skipped: actuator.skipped ?? false,\n    re_evaluation: {\n      active: actuator.re_evaluation?.active ?? false,\n      skipped: actuator.re_evaluation?.skipped ?? false,\n      interval: {\n        start: actuator.re_evaluation?.interval?.start ?? null,\n        end: actuator.re_evaluation?.interval?.end ?? null\n      }\n    }\n  };\n}\n\nconst weatherText = input.weather ?? \"\";\n\nreturn [\n  {\n    json: {\n      run_id: input.meta?.run_id ?? null,\n      adr: $input.first().json.meta.adr,\n      triggered_at: $input.first().json.meta.triggered_at ?? null,\n      mode: $input.first().json.crop.mode,\n\n      actuators: {\n        pump: extractActuator($input.first().json.actuators[0]),\n        fan: extractActuator($input.first().json.actuators[1])\n      },\n\n      sensors: {\n        soil_moisture: $input.first().json.sensors[0].value ?? null,\n        temperature: $input.first().json.sensors[1].value ?? null,\n        air_humidity: $input.first().json.sensors[2].value ?? null,\n        luminosity: $input.first().json.sensors[3].value ?? null\n      },\n\n      weather: {\n        precipitation_probability: $input.first().json.weather.precipitation_probability,\n        summary: $input.first().json.weather.summary ,\n      },\n      \n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -736,
+        16
+      ],
+      "id": "89858cb0-1598-458d-bc7b-cf9c2c2cf2dd",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Evaluate the current farm state and decide whether a picture should be taken now.\n\nFollow STRICTLY the decision logic defined in your system instructions, especially:\n- Re-evaluation rules (highest priority)\n- Actuator planning logic\n- Rain-based validation\n\nReturn your answer EXACTLY in the format:\nReasoning || {\"take_picture\": boolean}\n\nCurrent farm state:\n{{ JSON.stringify($json, null, 2) }}",
+        "options": {
+          "systemMessage": "You are the Picture Gating Agent for the SAHLA Box smart irrigation and ventilation system.\n\nSAHLA Box is an AI-driven agricultural system that manages actuators such as water pumps and ventilation fans. The system uses sensor data, weather forecasts, and historical reasoning to optimize crop growth and resource usage.\nThe system has 4 stages:\npreliminary decisions -> weather fetcher -> image processing (YOU) -> Final decisions\n\nYour role is to decide whether the ESP32-CAM should capture an image at the current moment. This image is used to validate environmental conditions (especially weather) and improve the accuracy of downstream decisions.\n\nDETAILED INPUT SEMANTICS (CRITICAL FOR UNDERSTANDING)\n\nThis input does NOT represent raw data only.\nIt represents the CURRENT STATE of an autonomous farming system.\nYou must interpret it as a dynamic system with:\n- ongoing actions\n- planned actions\n- uncertainty handling (re-evaluation)\n- environmental context\n\nGLOBAL CONTEXT\n\n\"run_id\":\nUnique identifier of the current execution cycle. Useful only for traceability. Does not affect decisions.\n\n\"triggered_at\":\nCurrent system time. CRITICAL for understanding when actions occur.\n\n\"adr\":\nServer IP address. Ignore this field.\n\n\"mode\":\nDefines the system’s strategy:\n\"growth_priority\" → favor crop growth (more irrigation, less risk avoidance)\n\"water_saver\" → conserve water (avoid unnecessary irrigation)\n\"energy_saver\" → conserves energy and avoids energy loss\n\"balanced\" → compromise between the 3 other modes\nThis influences how important validation (image capture) is before decisions.\n\nACTUATORS (CORE OF THE SYSTEM)\n\nEach actuator (pump, fan) represents a physical system component that may act now or later.\n\nIMPORTANT: You are NOT deciding actuator actions. You are deciding whether their behavior needs visual validation.\n\nEach actuator contains:\n\n\"control_mode\": \"auto\" (AI has full control) or \"semi-auto\" (AI only recommends).\n\n\"classification\": Describes the decision made by the preliminary decisions agent.\n* If the mode is semi-auto:\n\"TURN-ON\" : recommends turning the actuator on\n\"TURN-OFF\" : recommends turning the actuator off\n\"KEEP-OFF\" : actuator is off, recommends keeping it off\n\"KEEP-ON\" : actuator is on, recommends keeping it on\n\n* If the mode is auto:\n\"TURN-ON\" : AI turns the actuator on\n\"KEEP-OFF\": AI keeps the actuator off\n\nIf the classification is \"TURN-ON\" or \"KEEP-ON\":\n→ The actuator is currently running or about to run.\n→ A real-world action is happening or scheduled to happen. This is the PRIMARY indicator that a decision is about to impact the farm.\n\n\"skipped\":\nIf true, this actuator is temporarily ignored by the system. Treat it as NOT relevant for current decision-making.\n\n\"re_evaluation\":\nA CRITICAL mechanism for uncertainty handling. A previous decision was uncertain, so the system scheduled a future camera check.\n\nFields:\n\"active\": If true, the system expects a re-evaluation right now.\n\"skipped\": If true, the re-evaluation exists BUT should be ignored.\n\"interval\": Defines the scheduled time window (for context only; rely on the \"active\" boolean).\n\n*HIGHEST PRIORITY RULE:* If re_evaluation.active is true AND re_evaluation.skipped is false, you MUST take a picture.\n\nSENSORS (ENVIRONMENTAL STATE)\n\nThese describe the physical environment. They DO NOT directly trigger image capture, but they help justify decisions.\n\n\"soil_moisture\": Low → irrigation likely needed / High → irrigation less urgent\n\"temperature\": High → plants stressed, actions more critical / Low → less urgency\n\"air_humidity\": High → rain more likely, evaporation lower / Low → dry conditions\n\"luminosity\": High → strong sunlight / Low → cloudy or night\n\nThese values provide CONTEXT, not strict rules.\n\nWEATHER (PREDICTED FUTURE)\n\n\"weather\":\nA natural language explanation of current and upcoming conditions. Rely strictly on your semantic understanding of this text.\nAnalyze it carefully for:\n- precipitation_probability: Percentage likelihood of rain.\n- Imminence: Is rain happening now, in 30 minutes, or much later?\n- Intensity: Light drizzle, heavy rain, or storm?\n- Certainty: Strong likelihood or vague possibility?\n\nThis text is a KEY factor when deciding whether to validate conditions with a picture.\n\nCORE DECISION LOGIC\n\nYou MUST follow this logic strictly:\n\nSTEP 1 — RE-EVALUATION PRIORITY (HIGHEST PRIORITY)\nIf ANY actuator has:\nre_evaluation.active == true\nAND re_evaluation.skipped == false\nAND the main actuator skipped == false\nTHEN:\n→ You MUST take a picture immediately. This rule OVERRIDES everything else.\n\nSTEP 2 — NORMAL DECISION LOGIC\nIf no valid re-evaluation condition is met:\n\nA. HIGH WEATHER UNCERTAINTY CHECK\nEven if NO actuator is classified to run:\nIf the \"weather\" summary clearly indicates imminent rain, strong rain, or if \"precipitation_probability\" is high:\nTHEN:\n→ Taking a picture is RECOMMENDED. Validating weather conditions early reduces the risk of incorrect final decisions.\n\nB. PLANNED ACTUATOR CHECK\nDetermine if ANY actuator is planned to run. An actuator is \"planned to run\" if:\nclassification is \"TURN-ON\" or \"KEEP-ON\"\nAND skipped == false\n\nIF YES:\nIf the \"weather\" summary indicates even a slight possibility or upcoming risk of rain:\n→ Taking a picture is RECOMMENDED.\nOtherwise (e.g., clear skies, dry conditions expected):\n→ Taking a picture is OPTIONAL.\n\nC. NO ACTIVITY + LOW WEATHER RISK\nIf:\nNO actuators are planned to run\nAND there is NO indication of imminent or likely rain in the \"weather\" summary\nTHEN:\n→ DO NOT take a picture.\n\nADDITIONAL CONTEXT (OPTIONAL REASONING)\n\nYou MAY use sensor values to refine your reasoning (e.g., Very dry soil → irrigation more critical). But sensors must NEVER override the core logic rules above.\n\nFREEDOM OF JUDGEMENT\n\nWhile the core decision rules are STRICT, you have the freedom to exercise judgment in borderline or ambiguous cases.\n- You MAY weigh sensor readings, weather nuance, or actuator context to refine your reasoning.\n- You MAY decide to take a picture slightly outside strict thresholds if justified by risk awareness.\n- You MUST NEVER ignore or override the highest-priority rules (Step 1, Step 2A, Step 2B).\n\n→ Freedom = enhanced judgment\n→ Constraints = strict adherence to core rules\nYour reasoning MUST explicitly reflect the factors you considered when exercising this freedom.\n\nOUTPUT FORMAT (STRICT)\n\nReturn EXACTLY:\nReasoning text || {\"take_picture\": boolean}\n\n- Reasoning: concise, clear explanation\n- JSON: must be valid, no extra fields\n\nEXAMPLES\n\nRe-evaluation active:\nReasoning: Pump requires re-evaluation and the actuator doesn't include any true skipped attribute; image capture is mandatory. || {\"take_picture\": true}\n\nPlanned actuator + rain text:\nReasoning: Pump is classified as TURN-ON and the weather summary indicates approaching showers; capturing an image helps validate conditions before irrigation. || {\"take_picture\": true}\n\nPlanned actuator + clear weather text:\nReasoning: Pump is classified to run but the weather forecast explicitly states clear skies; taking a picture is not necessary. || {\"take_picture\": false}\n\nNo actuator activity:\nReasoning: No actuators are scheduled to run, no re-evaluation is active, and weather shows no imminent rain; image capture is unnecessary. || {\"take_picture\": false}"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -592,
+        16
+      ],
+      "id": "d14eabfc-ccb2-4944-9282-aaa6553ae954",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "=meta-llama/llama-4-scout-17b-16e-instruct",
+          "mode": "id"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -592,
+        256
+      ],
+      "id": "4cc44f53-49df-4f56-b201-54c4edaba64b",
+      "name": "OpenAI Chat Model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "fhcXQbV0HJG0Td2J",
+          "name": "OpenAi account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "for (const item of $input.all()) {\n  try {\n    // 1. Get the raw string from the AI output\n    const rawText = item.json.output;\n    \n    // 2. Split by '||' and grab the second part (index 1)\n    const jsonString = rawText.split('||')[1].trim();\n    \n    // 3. Parse the extracted string into a real JSON object\n    const parsedData = JSON.parse(jsonString);\n    \n    // 4. Extract ONLY the boolean value and save it\n    item.json.take_picture = parsedData.take_picture;\n    \n  } catch (error) {\n    // If something goes wrong, default to false so the workflow doesn't break\n    item.json.take_picture = false;\n  }\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        16
+      ],
+      "id": "0ba25491-db6d-4107-9b2f-d4772ecd7363",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "4a9ed92c-1a55-4e81-a6dd-4300d0dbb67b",
+              "leftValue": "={{ $json.take_picture }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -176,
+        16
+      ],
+      "id": "8c05244b-1edd-47e5-99bb-187fd9d43f86",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n {\n  \"summary\": \"no image to be taken into consideration\",\n  \"features\": {\n    \"rain_detected\": null,\n    \"water_on_leaves\": null,\n    \"cloud_cover\": null,\n    \"lighting_level\": null,\n    \"shadows_present\": null,\n    \"plant_motion_detected\": null,\n    \"motion_intensity\": null\n\n  },\n \"confidence_rain\": null,\n \"confidence_wind\": null\n }\n]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        32,
+        432
+      ],
+      "id": "83a39fe3-ab14-408e-a348-94982255c863",
+      "name": "Code in JavaScript3"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $json;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1184,
+        0
+      ],
+      "id": "4977cce9-459c-45ab-bb1c-b1a3d52f771c",
+      "name": "Code in JavaScript4"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Your base64 string\nconst base64Data = \"image/jpeg;base64,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\";\n  \n  /* \"https://thumbs.dreamstime.com/b/tomatoes-rain-7428261.jpg\" */\n\n// 2. Remove the \"data:image/jpeg;base64,\" header\nconst base64String = base64Data.split(',')[1];\n\n// 3. Convert the raw base64 string into a data Buffer\nconst buffer = Buffer.from(base64String, 'base64');\n\n// 4. Use n8n's built-in helper to properly format it as a binary file\nconst binaryData = await this.helpers.prepareBinaryData(buffer, 'test_capture.jpg', 'image/jpeg');\n\n// 5. Return the item with the correct n8n structure (empty json, populated binary)\nreturn [{\n  json: {},\n  binary: {\n    data: binaryData\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        384,
+        432
+      ],
+      "id": "4f661bcf-e130-4d55-a02e-0e3cff5be233",
+      "name": "Code in JavaScript5"
+    }
+  ],
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "meta": {
+            "run_id": "5102eb-ca506825570e",
+            "triggered_at": "2026-04-26T23:21:21+01:00",
+            "adr": "10.254.3.237"
+          },
+          "location": {
+            "latitude": 36.716781245509864,
+            "longitude": 3.1546447886010713,
+            "timezone": "Africa/Algiers"
+          },
+          "crop": {
+            "type": "Carrot",
+            "growth_stage": "Seedling",
+            "mode": "Balanced"
+          },
+          "sensors": [
+            {
+              "type": "soil_moisture",
+              "value": null,
+              "description": null
+            },
+            {
+              "type": "temperature",
+              "value": null,
+              "description": null
+            },
+            {
+              "type": "air_humidity",
+              "value": null,
+              "description": null
+            },
+            {
+              "type": "luminosity",
+              "value": null,
+              "description": null
+            }
+          ],
+          "actuators": [
+            {
+              "type": "pump",
+              "status": "unavailable",
+              "control_mode": "auto",
+              "classification": "KEEP-OFF",
+              "skipped": false,
+              "run": {
+                "active": false,
+                "execute_at": null,
+                "duration_minutes": null,
+                "execute_until": null
+              },
+              "re_evaluation": {
+                "active": false,
+                "skipped": false,
+                "interval": {
+                  "start": null,
+                  "end": null
+                }
+              }
+            },
+            {
+              "type": "fan",
+              "status": "off",
+              "control_mode": "auto",
+              "classification": "KEEP-OFF",
+              "skipped": false,
+              "run": {
+                "active": false,
+                "execute_at": null,
+                "duration_minutes": null,
+                "execute_until": null
+              },
+              "re_evaluation": {
+                "active": false,
+                "skipped": false,
+                "interval": {
+                  "start": null,
+                  "end": null
+                }
+              }
+            }
+          ],
+          "notifications": null,
+          "warnings": [
+            {
+              "name": "frost_risk",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "heavy_rainfall",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "high_humidity_level",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "high_temperature_detected",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "insufficient_sunlight",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "excessive_sunlight",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "low_soil_moisture",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "overwatering",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "strong_wind",
+              "active": true,
+              "severity": null,
+              "description": null
+            }
+          ],
+          "recommendation": null,
+          "weather": {
+            "precipitation_probability": 93,
+            "state": "cloudy",
+            "summary": "The next 48 hours in Algiers will see a mix of cloudy skies and occasional showers, with higher precipitation probabilities during the early morning and late evening hours. Temperatures will range from 15.8°C to 21.8°C, peaking around midday. Farmers should prepare for potential rainfall and cooler conditions.",
+            "insights": {
+              "highlights": {
+                "max_temperature": {
+                  "value": 21.8,
+                  "time": "2026-04-27T14:00:00+01:00"
+                },
+                "min_temperature": {
+                  "value": 15.8,
+                  "time": "2026-04-26T06:00:00+01:00"
+                }
+              },
+              "hourly": [
+                {
+                  "time": "2026-04-26T00:00:00+01:00",
+                  "temperature": 16.6,
+                  "humidity": 98,
+                  "precipitation_probability": 3
+                },
+                {
+                  "time": "2026-04-26T03:00:00+01:00",
+                  "temperature": 16.2,
+                  "humidity": 97,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-26T06:00:00+01:00",
+                  "temperature": 15.8,
+                  "humidity": 99,
+                  "precipitation_probability": 43
+                },
+                {
+                  "time": "2026-04-26T09:00:00+01:00",
+                  "temperature": 17,
+                  "humidity": 95,
+                  "precipitation_probability": 85
+                },
+                {
+                  "time": "2026-04-26T12:00:00+01:00",
+                  "temperature": 20.6,
+                  "humidity": 82,
+                  "precipitation_probability": 38
+                },
+                {
+                  "time": "2026-04-26T15:00:00+01:00",
+                  "temperature": 20.3,
+                  "humidity": 81,
+                  "precipitation_probability": 10
+                },
+                {
+                  "time": "2026-04-26T18:00:00+01:00",
+                  "temperature": 19,
+                  "humidity": 83,
+                  "precipitation_probability": 5
+                },
+                {
+                  "time": "2026-04-26T21:00:00+01:00",
+                  "temperature": 17,
+                  "humidity": 92,
+                  "precipitation_probability": 15
+                },
+                {
+                  "time": "2026-04-27T00:00:00+01:00",
+                  "temperature": 16.5,
+                  "humidity": 95,
+                  "precipitation_probability": 43
+                },
+                {
+                  "time": "2026-04-27T03:00:00+01:00",
+                  "temperature": 16.4,
+                  "humidity": 96,
+                  "precipitation_probability": 33
+                },
+                {
+                  "time": "2026-04-27T06:00:00+01:00",
+                  "temperature": 16.2,
+                  "humidity": 98,
+                  "precipitation_probability": 5
+                },
+                {
+                  "time": "2026-04-27T09:00:00+01:00",
+                  "temperature": 18.7,
+                  "humidity": 84,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-27T12:00:00+01:00",
+                  "temperature": 21.6,
+                  "humidity": 73,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-27T15:00:00+01:00",
+                  "temperature": 21.5,
+                  "humidity": 73,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-27T18:00:00+01:00",
+                  "temperature": 19.2,
+                  "humidity": 83,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-27T21:00:00+01:00",
+                  "temperature": 17.4,
+                  "humidity": 91,
+                  "precipitation_probability": 0
+                }
+              ]
+            }
+          },
+          "history": {
+            "runs": null,
+            "images": null
+          },
+          "image_processing": {
+            "summary": null,
+            "features": {
+              "rain_detected": null,
+              "water_on_leaves": null,
+              "cloud_cover": null,
+              "lighting_level": null,
+              "shadows_present": null,
+              "plant_motion_detected": null,
+              "motion_intensity": null
+            },
+            "confidence_rain": null,
+            "confidence_wind": null
+          }
+        }
+      },
+      {
+        "json": {
+          "summary": "Image shows a cluster of tomatoes with raindrops falling on and around them; the plants appear slightly bent and there is evidence of water on the tomatoes and possibly on the leaves; the lighting seems medium, likely due to the overcast sky suggested by the rain.",
+          "features": {
+            "rain_detected": true,
+            "water_on_leaves": true,
+            "cloud_cover": "high",
+            "lighting_level": "medium",
+            "shadows_present": false,
+            "plant_motion_detected": true,
+            "motion_intensity": "moderate"
+          },
+          "confidence": 95
+        }
+      }
+    ]
+  },
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code in JavaScript3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript3": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript5": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "e3b04489-1f5b-4b4f-9f44-19d475ebad1c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "575ddb137b9fe283573f6a90a36bc8dfe6740a9d1bc2af6faeaacdc43dee02a7"
+  },
+  "id": "kKj4oQPNazNl0PnG",
+  "tags": []
+}

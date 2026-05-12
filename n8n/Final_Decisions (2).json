@@ -1,0 +1,1415 @@
+{
+  "name": "Final_Decisions",
+  "nodes": [
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-safeguard-20b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        2368,
+        688
+      ],
+      "id": "538d927d-673c-4ed4-b5a5-645ec2cf88a4",
+      "name": "Groq Chat Model1",
+      "credentials": {
+        "groqApi": {
+          "id": "yeReWaKDMPkC6vH0",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const allItems = $input.all().map(i => i.json);\n\nconst mainJson = allItems.find(i => i.meta !== undefined);\nconst image    = allItems.find(i => i.summary !== undefined);\n\nif (image) {\n  mainJson.image_processing.summary    = image.summary    ?? null;\n  mainJson.image_processing.confidence_rain = image.confidence_rain ?? null;\n  mainJson.image_processing.confidence_wind = image.confidence_wind ?? null;\n  mainJson.image_processing.features   = image.features   ?? mainJson.image_processing.features;\n}\n\nreturn [{ json: mainJson }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        464
+      ],
+      "id": "88a2f408-4678-4f57-94bf-d98bb1f52450",
+      "name": "Merge the results"
+    },
+    {
+      "parameters": {
+        "jsCode": "const main = items[0].json;\n\n// ─── Actuators ───────────────────────────────────────────────────────────────\nconst filteredActuators = (main.actuators ?? [])\n  .filter(a => (a.classification === 'TURN-ON' || a.classification === 'KEEP-ON'))\n  .map(a => ({\n    type: a.type,\n    classification: a.classification,\n    control_mode: a.control_mode,\n    run: {\n      execute_at:    a.run?.execute_at    ?? null,\n      execute_until: a.run?.execute_until ?? null\n    },\n    re_evaluation: {\n      start: a.re_evaluation?.interval?.start ?? null,\n      end:   a.re_evaluation?.interval?.end   ?? null\n    }\n  }));\n\n\n// ─── History ─────────────────────────────────────────────────────────────────\nlet filteredHistory = null;\n\nif (main.history && Array.isArray(main.history.runs)) {\n  // Grab up to the 10 most recent runs (assuming newest is at index 0)\n  const runsToProcess = main.history.runs.slice(0, 10);\n  const count = runsToProcess.length;\n\n  if (count > 0) {\n    let sumTemp = 0, sumHum = 0, sumSoil = 0, sumLight = 0;\n    \n    // Sum up the sensor values across the stored runs\n    runsToProcess.forEach(r => {\n      sumTemp += (r.sensors?.temp || 0);\n      sumHum  += (r.sensors?.hum || 0);\n      sumSoil += (r.sensors?.soil || 0);\n      sumLight += (r.sensors?.light || 0);\n    });\n\n    // Output the formatted structure with integer averages\n    filteredHistory = {\n      avg_temp: Math.round(sumTemp / count),\n      avg_hum: Math.round(sumHum / count),\n      avg_soil: Math.round(sumSoil / count),\n      avg_light: Math.round(sumLight / count),\n      runs: main.history.runs.slice(0, 3) // Only keep the 3 latest runs\n    };\n  } else {\n    // Fallback if the runs array is empty but exists\n    filteredHistory = {\n      avg_temp: null, avg_hum: null, avg_soil: null, avg_light: null, runs: []\n    };\n  }\n}\n\n// ─── Weather Hourly Filtering ────────────────────────────────────────────────\nconst triggerTime = new Date(main.meta?.triggered_at || Date.now());\nconst hourlyData = main.weather?.insights?.hourly || [];\n\nlet targetIndex = hourlyData.findIndex(h => new Date(h.time) >= triggerTime);\nlet recent_and_upcoming_forecast = [];\n\nif (targetIndex !== -1) {\n  const startIndex = Math.max(0, targetIndex - 1);\n  recent_and_upcoming_forecast = hourlyData.slice(startIndex, startIndex + 5);\n} else {\n  recent_and_upcoming_forecast = hourlyData.slice(-5);\n}\n\n// ─── Assemble output ─────────────────────────────────────────────────────────\nconst output = {\n  time: main.meta?.triggered_at ?? null,\n  crop: main.crop ?? null,\n  sensors: $input.first().json.sensors,\n  weather: {\n    precipitation_probability: main.weather?.precipitation_probability ?? null,\n    state:                     main.weather?.state ?? null,\n    summary:                   main.weather?.summary ?? null,\n    insights: {\n      highlights:                   main.weather?.insights?.highlights ?? null,\n      recent_and_upcoming_forecast: recent_and_upcoming_forecast\n    }\n  },\n  image_processing: main.image_processing ?? null,\n  history:          filteredHistory, \n  actuators:        filteredActuators\n};\n\nreturn [{ json: output }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        384
+      ],
+      "id": "fcb5d785-e5ba-48c1-8cad-f2b49586a264",
+      "name": "filter only what is needed for final decisions"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -448,
+        464
+      ],
+      "id": "584a5613-6d94-4cee-96df-a77d3d026e71",
+      "name": "Weather_Fetcher + Image_Processing"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "NeOzZShp9kn1lDSK",
+          "mode": "list",
+          "cachedResultName": "history_final_decisions",
+          "cachedResultUrl": "/projects/twIZyN0xpv9Z3ece/datatables/NeOzZShp9kn1lDSK"
+        },
+        "returnAll": true
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        560
+      ],
+      "id": "ee8b6289-d324-42e6-b97a-6815996f2869",
+      "name": "Get row(s)"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Retrieve the array of items coming from the previous node\nconst runsData = items.map(item => item.json);\n\n// Initialize sum variables\nlet sumTemp = 0;\nlet sumHum = 0;\nlet sumSoil = 0;\nlet sumLight = 0;\n\n// Loop through ALL runs to calculate the sums for our averages\nfor (const run of runsData) {\n  sumTemp += run.temp;\n  sumHum += run.hum;\n  sumSoil += run.soil;\n  sumLight += run.light;\n}\n\n// Calculate the final averages (using Math.round to keep them as integers)\nconst count = runsData.length || 1;\n\n// Grab ONLY the first run (the most recent one) to format for the AI\nconst recentRun = runsData[0];\nconst formattedRuns = [];\n\n// Ensure a run actually exists before trying to format it\nif (recentRun) {\n  formattedRuns.push({\n    date_time: recentRun.date_time,\n    crop: recentRun.crop,\n    mode: recentRun.mode,\n    growth_stage: recentRun.growth_stage,\n    sensors: {\n      temp: recentRun.temp,\n      hum: recentRun.hum,\n      soil: recentRun.soil,\n      light: recentRun.light\n    },\n    cam: {\n      summary: recentRun.cam_summary,\n      confidence_rain: recentRun.confidence_rain,\n      confidence_wind: recentRun.confidence_wind\n    },\n    weather_summary: recentRun.weather_summary,\n    decision_logic: recentRun.decision_logic\n  });\n}\n\nconst outputPayload = {\n  avg_temp: Math.round(sumTemp / count),\n  avg_hum: Math.round(sumHum / count),\n  avg_soil: Math.round(sumSoil / count),\n  avg_light: Math.round(sumLight / count),\n  // This will now be an array containing exactly 1 run\n  runs: formattedRuns\n};\n\n// Return the newly structured payload\nreturn [{ json: outputPayload }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        560
+      ],
+      "id": "185f9de5-c260-4778-b3aa-906bd383ec88",
+      "name": "get_history"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Fetch the main payload specifically from its node\nconst mainItems = $('filter only what is needed for final decisions').all();\nlet mainPayload = mainItems[0].json;\n\n// 2. Fetch the pre-calculated history specifically from the get_history node\nconst historyItems = $('get_history').all();\n\n// 3. Setup the fallback logic\nlet historyData = null; // Default to null if no history exists\n\n// Check if the history node actually returned items\nif (historyItems && historyItems.length > 0) {\n  historyData = historyItems[0].json;\n  \n  // Just in case the JSON payload itself is wrapped in an array\n  if (Array.isArray(historyData)) {\n    historyData = historyData.length > 0 ? historyData[0] : null;\n  }\n}\n\n// 4. Inject the history into the main payload\n// If your main payload is wrapped in an array, we inject it into the first object:\nif (Array.isArray(mainPayload)) {\n  if (mainPayload.length > 0) {\n    mainPayload[0].history = historyData;\n  }\n  return mainPayload.map(item => ({ json: item }));\n} else {\n  // If it's a standard object:\n  mainPayload.history = historyData;\n  return [{ json: mainPayload }];\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        592,
+        464
+      ],
+      "id": "7d97ad04-7762-45f1-8d20-ed68056b1f1a",
+      "name": "parse_history"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        464,
+        464
+      ],
+      "id": "012809dc-a044-463b-9897-c038d6179222",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=CURRENT TIME:\n{{$json.time}}\n\nCROP INFO:\n- Type:          {{$json.crop.type}}\n- Growth stage:  {{$json.crop.growth_stage}}\n- Farm mode:     {{$json.crop.mode}}\n\nLIVE SENSORS:\n{{JSON.stringify($json.sensors, null, 2)}}\n*Sensor units: % for soil moisture and air humidity, lx for luminosity, degree celsius for temperature*\n\nWEATHER FORECAST:\n- Precipitation probability: {{$json.weather.precipitation_probability}}%\n- State:                     {{$json.weather.state}}\n- Summary:                   {{$json.weather.summary}}\n- Forecast Insights:         {{JSON.stringify($json.weather.insights, null, 2)}}\n\nIMAGE PROCESSING (CURRENT VISUALS):\n- Summary:          {{$json.image_processing.summary}}\n- Confidence:       {{$json.image_processing.confidence_rain !== null ? $json.image_processing.confidence_rain + '%' : 'N/A'}}\n- Rain detected:    {{$json.image_processing.features.rain_detected}}\n- Water on leaves:  {{$json.image_processing.features.water_on_leaves}}\n- Cloud cover:      {{$json.image_processing.features.cloud_cover}}\n\nPRELIMINARY ACTUATOR STATUS:\n{{JSON.stringify($json.actuators.filter(a => a.type === 'pump'), null, 2)}}\n\nBased on the Weather and Image Processing data, should the downstream scheduling agents PROCEED with the Preliminary Agent's request to run the pump, or should the actuator be put into a NEED-RE-EVALUATION state? \nOutput only the JSON object.",
+        "options": {
+          "systemMessage": "You are the Layer 1 Pump Re-evaluation Agent in an agricultural AI pipeline. \n\n─── YOUR ROLE & PIPELINE POSITION ─────────────────────────────────────────────\n- You are the FIRST agent in a multi-step decision pipeline.\n- A preceding Preliminary Decisions agent has already looked at basic sensor data (like soil moisture) and determined that the irrigation pump needs to run. \n- Your downstream colleagues (Layer 2 Agents) are responsible for making the final decisions concerning whether the pump should actually work, when it should start, and for how much time.\n- YOUR SOLE JOB: Look at the visual data (Camera) and forecast data (Weather) to decide if we should let the downstream agents proceed with scheduling the pump, OR if the situation requires a \"re-evaluation\" to delay the decision.\n\n─── UNDERSTANDING RE-EVALUATION (CRITICAL CONCEPT) ────────────────────────────\nRe-evaluation is a core control mechanism that operates at the final decisions level, designed to delay actions rather than outright cancel them. \n\nTo understand why this matters, consider the role of preliminary decisions: they determine whether an actuator should run based purely on sensor data, meaning that any actuator entering the re-evaluation state is one that genuinely needs to run under normal conditions — the soil is dry, the need is real. \n\nThe problem arises at the final decisions level, where contextual factors such as weather forecasts, camera analysis, or broader environmental data may conflict with immediately executing that action. Simply not running the actuator is not a valid option, because the next system cycle will detect the exact same need, preliminary decisions will flag the same actuator, and final decisions will face the identical conflict — an endless feedback loop that burns through computation and API calls for no productive outcome. \n\nInstead, final decisions sets the actuator to \"NEED-RE-EVALUATION\", which acts as a \"snooze\" button: the system acknowledges that the actuator genuinely needs to run, but suspends any further processing of it entirely until a scheduled re-evaluation window is reached. During the period before that window, the actuator is ignored completely — no repeated decisions, no wasted cycles. Once the window opens, the actuator is reassessed under updated conditions: if rain arrived as forecasted, soil moisture may now be sufficient and preliminary decisions will no longer request the pump at all; if the rain missed the farm, final decisions can now safely approve it. This design perfectly aligns digital logic with the physical time it takes for real-world environmental conditions to change, preventing redundant loops, avoiding premature actuator usage, and ensuring that every decision is made at the most informed and appropriate moment.\n\n─── DATA DICTIONARY (WHAT YOUR INPUT MEANS) ───────────────────────────────────\nYou will receive environmental, weather, and camera data. Pay close attention to these specific fields, as they are the only ones relevant to the pump:\n\n1. WEATHER DATA:\n   - precipitation_probability: The % chance of rain. High rain probability means nature will water the crops, so running the pump might cause overwatering.\n   - summary & insights: Context about incoming storms, temperature spikes, or clearing skies.\n\n2. IMAGE PROCESSING DATA:\n   - summary: A plain-text description of the field's current visual state. If it says \"no image to be taken into consideration\", ignore all camera data and rely on the weather.\n   - features.rain_detected: Indicates if it is actively raining in the picture.\n   - features.water_on_leaves: Indicates if the plants are currently wet. Watering plants that are already wet can promote fungal diseases or indicates recent rain.\n   - features.cloud_cover: Heavy clouds might correlate with incoming rain.\n   - confidence_rain: A percentage (0-100) indicating how reliable the image processing is concerning whether raining or not. If confidence is low (e.g., < 60%), prioritize the weather forecast over the camera feature.\n\n─── DECISION LOGIC ────────────────────────────────────────────────────────────\nYou must output a single action for the pump:\n\n- \"PROCEED\": Choose this if the weather is clear (low precipitation risk) and the camera shows no active rain or wet leaves. This allows downstream agents to schedule the needed irrigation.\n- \"NEED-RE-EVALUATION\": Choose this if a storm is incoming, it is currently raining, or there is significant water on the leaves. This triggers the snooze mechanic to wait and see if real-world conditions resolve the soil moisture deficit naturally.\n\n==================== OUTPUT FORMAT (STRICT) ====================\n\nYou must return EXACTLY one line of plain text.\n\nDO NOT return JSON\nDO NOT return objects\nDO NOT use { } [ ]\nDO NOT use quotes \" or '\nDO NOT use backticks\nDO NOT add explanations before or after\n\nOUTPUT MUST MATCH THIS EXACT STRUCTURE:\n\npump | ACTION | REASONING\n\nOR\n\nfan | ACTION | REASONING\n\n\n==================== HARD CONSTRAINTS ====================\n\n1. The output must contain EXACTLY:\n   - 2 pipe characters |\n   - 3 segments\n\n2. Structure:\n   DEVICE | ACTION | REASONING\n\n3. DEVICE must be:\n   pump OR fan\n\n4. ACTION must be EXACTLY one of:\n\n   PROCEED\n   NEED-RE-EVALUATION\n\n5. REASONING rules:\n   - No punctuation at all\n   - No periods\n   - No commas\n   - No quotes\n   - Only words and spaces\n\n6. The entire output MUST be on ONE LINE\n\n\n==================== FAILURE CONDITIONS ====================\n\nYour answer is INVALID if:\n- You use JSON\n- You use { } or [ ]\n- You add quotes\n- You add more than one line\n- You miss a pipe |\n- You add punctuation in reasoning\n\n\n==================== VALID EXAMPLES ====================\n\npump | NEED-RE-EVALUATION | Rain detected on camera override forecast\n\n==================== FINAL INSTRUCTION ====================\n\nReturn ONLY the formatted line\nDo not explain anything\nDo not wrap the output\nDo not add extra text\n\n==================================================\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1424,
+        272
+      ],
+      "id": "caf01376-3eef-4d92-b0d5-c17cc8d3c54f",
+      "name": "re_evaluation_pump"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=CURRENT TIME:\n{{$json.time}}\n\nCROP INFO:\n- Type:          {{$json.crop.type}}\n- Growth stage:  {{$json.crop.growth_stage}}\n- Farm mode:     {{$json.crop.mode}}\n\nLIVE SENSORS:\n{{JSON.stringify($json.sensors, null, 2)}}\n*Sensor units: % for soil moisture and air humidity, lx for luminosity, degree celsius for temperature*\n\nWEATHER FORECAST:\n- State:                     {{$json.weather.state}}\n- Summary:                   {{$json.weather.summary}}\n- Forecast Insights:         {{JSON.stringify($json.weather.insights, null, 2)}}\n\nIMAGE PROCESSING (CURRENT VISUALS):\n- Summary:               {{$json.image_processing.summary}}\n- Confidence:            {{$json.image_processing.confidence_wind !== null ? $json.image_processing.confidence_wind + '%' : 'N/A'}}\n- Plant motion detected: {{$json.image_processing.features.plant_motion_detected}}\n- Motion intensity:      {{$json.image_processing.features.motion_intensity}}\n\nPRELIMINARY ACTUATOR STATUS:\n{{JSON.stringify($json.actuators.filter(a => a.type === 'fan'), null, 2)}}\n\nBased on the Weather and Image Processing data, should the downstream scheduling agents PROCEED with the Preliminary Agent's request to run the fan, or should the actuator be put into a NEED-RE-EVALUATION state? \nOutput only the JSON object.",
+        "options": {
+          "systemMessage": "You are the Layer 1 Fan Re-evaluation Agent in an agricultural AI pipeline. \n\n─── YOUR ROLE & PIPELINE POSITION ─────────────────────────────────────────────\n- You are the FIRST agent in a multi-step decision pipeline.\n- A preceding Preliminary Decisions agent has already looked at basic sensor data (like high temperature or air humidity) and determined that the ventilation fan needs to run. \n- Your downstream colleagues (Layer 2 Agents) are responsible for making the final decisions concerning whether the fan should actually work, when it should start, and for how much time.\n- YOUR SOLE JOB: Look at the visual data (Camera) and forecast data (Weather) to decide if we should let the downstream agents proceed with scheduling the fan, OR if the situation requires a \"re-evaluation\" to delay the decision.\n\n─── UNDERSTANDING RE-EVALUATION (CRITICAL CONCEPT) ────────────────────────────\nRe-evaluation is a core control mechanism that operates at the final decisions level, designed to delay actions rather than outright cancel them. \n\nTo understand why this matters, consider the role of preliminary decisions: they determine whether an actuator should run based purely on sensor data, meaning that any actuator entering the re-evaluation state is one that genuinely needs to run under normal conditions — the temperature or humidity is critically high, the need is real. \n\nThe problem arises at the final decisions level, where contextual factors such as weather forecasts, camera analysis, or broader environmental data may conflict with immediately executing that action. Simply not running the actuator is not a valid option, because the next system cycle will detect the exact same need, preliminary decisions will flag the same actuator, and final decisions will face the identical conflict — an endless feedback loop that burns through computation and API calls for no productive outcome. \n\nInstead, final decisions sets the actuator to \"NEED-RE-EVALUATION\", which acts as a \"snooze\" button: the system acknowledges that the actuator genuinely needs to run, but suspends any further processing of it entirely until a scheduled re-evaluation window is reached. During the period before that window, the actuator is ignored completely — no repeated decisions, no wasted cycles. Once the window opens, the actuator is reassessed under updated conditions: if a storm has passed or weather naturally cooled the farm, the sensors may normalize and preliminary decisions will no longer request the fan at all; if the need persists and external conditions are safe, final decisions can now safely approve it. This design perfectly aligns digital logic with the physical time it takes for real-world environmental conditions to change, preventing redundant loops, avoiding premature actuator usage, and ensuring that every decision is made at the most informed and appropriate moment.\n\n─── DATA DICTIONARY (WHAT YOUR INPUT MEANS) ───────────────────────────────────\nYou will receive environmental, weather, and camera data. Pay close attention to these specific fields, as they are the only ones relevant to the fan:\n\n1. WEATHER DATA:\n   - summary & insights: Look for indicators of severe incoming weather, such as heavy storms or gales. Running ventilation fans during severe external storms can draw in damaging weather or risk hardware damage. \n\n2. IMAGE PROCESSING DATA:\n   - summary: A plain-text description of the field's current visual state. If it says \"no image to be taken into consideration\", ignore all camera data and rely on the weather.\n   - features.plant_motion_detected: Indicates if the plants are physically moving in the camera view.\n   - features.motion_intensity: Indicates how violently the plants are moving (e.g., high intensity means strong winds are already hitting the farm). If natural wind is extremely high, running mechanical fans may be dangerous or redundant.\n   - confidence_wind: A percentage (0-100) indicating how reliable the image processing is ( concerning the claim is it windy or not ). If confidence is low (e.g., < 60%), prioritize the weather forecast over the camera features.\n─── DECISION LOGIC ────────────────────────────────────────────────────────────\nYou must output a single action for the fan:\n\n- \"PROCEED\": Choose this if the weather is relatively stable (no severe storms incoming) and the camera shows normal or no plant motion. This allows downstream agents to schedule the needed ventilation to clear out heat/humidity.\n- \"NEED-RE-EVALUATION\": Choose this if a severe storm is imminent, or the camera shows intense plant motion (high winds). This triggers the snooze mechanic to wait until the severe weather passes before attempting to ventilate.\n\n==================== OUTPUT FORMAT (STRICT) ====================\n\nYou must return EXACTLY one line of plain text.\n\nDO NOT return JSON\nDO NOT return objects\nDO NOT use { } [ ]\nDO NOT use quotes \" or '\nDO NOT use backticks\nDO NOT add explanations before or after\n\nOUTPUT MUST MATCH THIS EXACT STRUCTURE:\n\npump | ACTION | REASONING\n\nOR\n\nfan | ACTION | REASONING\n\n\n==================== HARD CONSTRAINTS ====================\n\n1. The output must contain EXACTLY:\n   - 2 pipe characters |\n   - 3 segments\n\n2. Structure:\n   DEVICE | ACTION | REASONING\n\n3. DEVICE must be:\n   pump OR fan\n\n4. ACTION must be EXACTLY one of:\n\n   PROCEED\n   NEED-RE-EVALUATION\n\n5. REASONING rules:\n   - No punctuation at all\n   - No periods\n   - No commas\n   - No quotes\n   - Only words and spaces\n\n6. The entire output MUST be on ONE LINE\n\n\n==================== FAILURE CONDITIONS ====================\n\nYour answer is INVALID if:\n- You use JSON\n- You use { } or [ ]\n- You add quotes\n- You add more than one line\n- You miss a pipe |\n- You add punctuation in reasoning\n\n\n==================== VALID EXAMPLES ====================\n\nfan | NEED-RE-EVALUATION | Rain detected on camera override forecast\n\n==================== FINAL INSTRUCTION ====================\n\nReturn ONLY the formatted line\nDo not explain anything\nDo not wrap the output\nDo not add extra text\n\n==================================================\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1424,
+        624
+      ],
+      "id": "f0977fa2-a31b-4b0f-94e8-d3a4ad93c787",
+      "name": "re_evaluation_fan"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1824,
+        448
+      ],
+      "id": "a457c76c-f5d7-489d-bb96-b8d78b7c672d",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=CURRENT TIME:\n{{ $('parse_history').item.json.time }}\n\nENVIRONMENTAL DATA:\n- Weather Summary: {{ $('parse_history').item.json.weather.summary }}\n- Precipitation Probability: {{ $('parse_history').item.json.weather.precipitation_probability }}%\n- Image Summary: {{ $('parse_history').item.json.image_processing.summary }}\n- Rain Detected: {{ $('parse_history').item.json.image_processing.features.rain_detected }}\n- Water on Leaves: {{ $('parse_history').item.json.image_processing.features.water_on_leaves }}\n- Cloud Cover: {{ $('parse_history').item.json.image_processing.features.cloud_cover }}%\n- Lighting Level: {{ $('parse_history').item.json.image_processing.features.lighting_level }}\n- Shadows Present: {{ $('parse_history').item.json.image_processing.features.shadows_present }}\n- Plant Motion Detected: {{ $('parse_history').item.json.image_processing.features.plant_motion_detected }}\n- Motion Intensity: {{ $('parse_history').item.json.image_processing.features.motion_intensity }}\nconfidence in raining through image processing: {{ $('parse_history').item.json.image_processing.confidence_rain }}\nconfidence in windy conditions through image processing: {{ $('parse_history').item.json.image_processing.confidence_wind }}\n\nPRELIMINARY ACTUATOR STATUS:\n{{ JSON.stringify($('parse_history').item.json.actuators.filter(a => a.type === 'pump' || a.type === 'fan'), null, 2) }}\n\n──────────────────────────────────────────\nOUTPUTS TO AUDIT:\n\n1. PUMP AGENT OUTPUT:\naction: {{ $json.pump.action }}\nreasoning: {{ $json.pump.reasoning }}\n\n2. FAN AGENT OUTPUT:\naction: {{ $json.fan.action }}\nreasoning: {{ $json.fan.reasoning }}\n──────────────────────────────────────────\n\nAudit the outputs above against the environmental data and the Re-evaluation rules. \n1. Validate or correct the action and reasoning.\n2. If the action is NEED-RE-EVALUATION, determine the start time (based on the provided CURRENT TIME) and the window duration in minutes.\n3. Ensure the start time is at least 2h but no more than 6h in the future.\n\nOutput ONLY the final JSON array.",
+        "options": {
+          "systemMessage": "You are the Layer 1.5 Quality Assurance and Merge Agent in an agricultural AI pipeline.\n\n─── YOUR ROLE & PIPELINE POSITION ─────────────────────────────────────────────\n- You sit between the Layer 1 Re-evaluation Agents (who independently assessed the Pump and the Fan) and the Layer 2 Scheduling Agents.\n- Your input consists of the raw environmental data (Weather, Camera, Sensors) AND the generated JSON outputs from the Layer 1 Pump and Fan agents.\n- YOUR SOLE JOB: Audit the logic of the preceding agents to ensure they followed their instructions, correct any mistakes or hallucinations based on strict environmental rules, and combine their results into a single, clean JSON array.\n\n─── WHAT THE PRECEDING AGENTS WERE TASKED TO DO ───────────────────────────────\nThe Layer 1 agents were instructed to look at visual data (Camera) and forecast data (Weather) to decide if an actuator should \"PROCEED\" or be set to \"NEED-RE-EVALUATION\". You must evaluate their outputs based on whether they correctly applied the following concept:\n\n─── UNDERSTANDING RE-EVALUATION (CRITICAL CONTEXT) ────────────────────────────\nRe-evaluation is a core control mechanism that operates at the final decisions level, designed to delay actions rather than outright cancel them. \n\nPreliminary decisions determine whether an actuator should run based purely on sensor data, meaning that any actuator entering the re-evaluation state genuinely needs to run under normal conditions (e.g., the soil is dry, or temperatures are critical). \n\nThe problem arises when contextual factors (weather forecasts, camera analysis) conflict with immediately executing that action. Simply not running the actuator is not a valid option, because the next system cycle will detect the exact same need, creating an endless feedback loop that burns through computation and API calls. \n\nInstead, setting an actuator to \"NEED-RE-EVALUATION\" acts as a \"snooze\" button: the system acknowledges the need, but suspends any further processing until a scheduled re-evaluation window is reached. During the period before that window, the actuator is ignored completely. Once the window opens, the actuator is reassessed: if nature resolved the issue (e.g., it rained), preliminary decisions won't request the actuator; if the need persists and conditions are now clear, final decisions can safely approve it. This prevents redundant loops, avoids premature actuator usage, and aligns digital logic with real-world physical changes.\n\n─── DATA DICTIONARY (INPUT EXPLANATION) ───────────────────────────────────────\nYou will receive environmental, weather, and camera data to use as your objective source of truth during the audit:\n\n1. WEATHER DATA:\n   - Weather Summary & Precipitation Probability: Key indicators of incoming rain or severe storms. High precipitation probability or mentions of storms represent a conflict for the pump and fan.\n\n2. PRIMARY VISUAL DATA (PUMP & FAN RELEVANT):\n   - Rain Detected & Water on Leaves: If true, natural watering is occurring; running the pump is redundant or dangerous (fungal risk).\n- confidence_rain: A percentage (0-100) indicating how reliable the image processing is concerning whether raining or not. If confidence is low (e.g., < 60%), prioritize the weather forecast over the camera features.\n   - Plant Motion Detected & Motion Intensity: Indicators of wind. High motion intensity means severe winds are hitting the farm, making fan operation dangerous or redundant.\n   - confidence_wind: A percentage (0-100) indicating how reliable the image processing is ( concerning the claim is it windy or not ). If confidence is low (e.g., < 60%), prioritize the weather forecast over the camera features.\n\n3. SECONDARY VISUAL CONTEXT (CORROBORATION):\n   - Cloud Cover, Lighting Level, Shadows Present: Use these to corroborate the primary data. Heavy cloud cover, low lighting levels, and a lack of shadows support the likelihood of incoming rain or storms. Low cloud cover, high lighting levels, and distinct shadows corroborate clear skies and safe operating conditions.\n\n4. PRELIMINARY ACTUATOR STATUS:\n   - Shows the raw, sensor-based decision (e.g., \"TURN-ON\") that originally triggered this workflow.\n\n─── AUDIT RULES (THE LOGIC YOU MUST ENFORCE) ──────────────────────────────────\nCheck the preceding agents' reasoning and actions against the raw data. \n\n1. PUMP AUDIT RULES:\n   - \"PROCEED\" is ONLY valid if precipitation risk is low and the camera shows no active rain or wet leaves.\n   - \"NEED-RE-EVALUATION\" is REQUIRED if a storm is incoming, it is currently raining, or there is significant water on the leaves.\n   - CORRECTION: If the agent chose PROCEED but the data shows high rain probability or wet leaves, you MUST override the action to \"NEED-RE-EVALUATION\" and update the reasoning.\n\n2. FAN AUDIT RULES:\n   - \"PROCEED\" is ONLY valid if there are no severe storms incoming and plant motion is normal/none.\n   - \"NEED-RE-EVALUATION\" is REQUIRED if a severe storm is imminent or the camera shows intense plant motion (high winds).\n   - CORRECTION: If the agent chose PROCEED but the data shows high wind intensity or severe storms, you MUST override the action to \"NEED-RE-EVALUATION\" and update the reasoning.\n\n─── RE-EVALUATION SCHEDULING RULES (NEW) ──────────────────────────────────────\nIf an actuator's action is \"NEED-RE-EVALUATION\", you must also decide the timing for the \"snooze\" window. This window tells the system when it is safe to look at this actuator again.\n\n1. START DELAY: The re-evaluation must start between 2 hours (minimum) and 6 hours (maximum) from the CURRENT TIME provided.\n   - Example: If it is 14:00, the start can be anywhere between 16:00 and 20:00.\n2. DURATION: The duration of the re-evaluation window itself must not exceed 60 minutes.\n3. LOGIC: Choose a longer delay (e.g., 5-6 hours) for severe storm forecasts or heavy rain. Choose a shorter delay (e.g., 2-3 hours) for passing clouds or light wind gusts.\n4. NULLIFICTION: If the action is \"PROCEED\", the re_evaluation_start and re_evaluation_duration fields MUST be null.\n\n─── CRITICAL REMARK ───────────────────────────────────\nwhen an actuators action is IGNORE, ignore this actuator and don't include anything in the output about it \n\n─── OUTPUT FORMAT ─────────────────────────────────────────────────────────────\nReturn ONLY a valid JSON array. Do not include markdown, backticks, or text.\n\nFormat:\n[\n  {\n    \"actuator\": \"pump\",\n    \"action\": \"PROCEED\" | \"NEED-RE-EVALUATION\",\n    \"reasoning\": \"Reasoning string here\",\n    \"re_evaluation_start\": \"YYYY-MM-DDTHH:mm:ss+HH:MM\" | null,\n    \"re_evaluation_duration_minutes\": integer | null\n  },\n  {\n    \"actuator\": \"fan\",\n    \"action\": \"PROCEED\" | \"NEED-RE-EVALUATION\",\n    \"reasoning\": \"Reasoning string here\",\n    \"re_evaluation_start\": \"YYYY-MM-DDTHH:mm:ssZ\" | null,\n    \"re_evaluation_duration_minutes\": integer | null\n  }\n]\n\nREMARKs: \n- if you recive an actuator with action IGNORE, ignore it and do not include it in the output \n- make the reasoning short, one sentence at max\n- if an actuator need re-evaluation make it obvious in the reasoning, eg: Wet leaves and heavy cloud cover conflict with pumping, re-evaluation is needed\n- you MUST preserve the exact timezone offset provided in the CURRENT TIME input. Do NOT convert the time to UTC or change the offset under any circumstances (e.g., if the input ends in +01:00, your output must end in +01:00, NEVER Z). "
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        2368,
+        448
+      ],
+      "id": "55e172dd-7065-4441-bdf0-d96a24fa2b38",
+      "name": "correct_re_evaluation"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─── Helper Functions ────────────────────────────────────────────────────────\n// Calculate interval.end while preserving the AI's timezone offset strictly\nfunction calculateIntervalEnd(isoString, minutesToAdd) {\n    if (!isoString || typeof minutesToAdd !== 'number') return null;\n    const d = new Date(isoString);\n    if (isNaN(d.getTime())) return null; \n\n    // Add the duration\n    d.setMinutes(d.getMinutes() + minutesToAdd);\n    \n    // Extract original timezone offset (e.g., \"+01:00\" or \"Z\") from the AI string\n    const tzMatch = isoString.match(/([+-]\\d{2}:\\d{2}|Z)$/);\n    const tz = tzMatch ? tzMatch[1] : 'Z'; \n\n    // Convert the offset into total minutes\n    let offsetTotal = 0;\n    if (tz !== 'Z') {\n        const sign = tz.startsWith('+') ? 1 : -1;\n        const hours = parseInt(tz.substring(1, 3), 10);\n        const mins = parseInt(tz.substring(4, 6), 10);\n        offsetTotal = sign * ((hours * 60) + mins);\n    }\n\n    // Shift the date temporarily so standard UTC methods output your local time correctly\n    const local = new Date(d.getTime() + (offsetTotal * 60000));\n    \n    // Reconstruct the string manually with the original offset (NO milliseconds)\n    const pad = (n) => String(n).padStart(2, '0');\n    return `${local.getUTCFullYear()}-${pad(local.getUTCMonth() + 1)}-${pad(local.getUTCDate())}T${pad(local.getUTCHours())}:${pad(local.getUTCMinutes())}:${pad(local.getUTCSeconds())}${tz}`;\n}\n\n// ─── Main Execution ──────────────────────────────────────────────────────────\n\n// 1. Get the main environmental data from the \"Merge the results\" node.\nlet mainData = JSON.parse(JSON.stringify($('Merge the results').first().json));\n\n// 2. Safely extract and parse the AI's stringified output\nlet rawOutput = $input.first().json.output || \"[]\";\n\n// Clean up markdown just in case the AI hallucinates backticks\nrawOutput = rawOutput.replace(/```json/g, '').replace(/```/g, '').trim();\n\nlet decisions = [];\ntry {\n  decisions = JSON.parse(rawOutput);\n} catch (e) {\n  console.error(\"Failed to parse AI output:\", e.message);\n}\n\n// 3. Map the parsed AI decisions to the main actuators array\nlet actuators = mainData.actuators || [];\n\nfor (let actuator of actuators) {\n  // Find the AI decision for this specific actuator\n  let decision = decisions.find(d => d.actuator === actuator.type);\n  \n  if (decision) {\n    if (decision.action === \"NEED-RE-EVALUATION\") {\n      // Map the action to classification to act as the \"snooze\" state\n      actuator.classification = \"NEED-RE-EVALUATION\";\n      actuator.re_evaluation.active = true;\n      \n      // Inject reasoning into recommended_action\n      actuator.recommended_action = decision.reasoning;\n      \n      // Calculate the Date-Time Interval using the timezone-preserving function\n      if (decision.re_evaluation_start && decision.re_evaluation_duration_minutes) {\n        actuator.re_evaluation.interval.start = decision.re_evaluation_start;\n        actuator.re_evaluation.interval.end = calculateIntervalEnd(\n            decision.re_evaluation_start, \n            decision.re_evaluation_duration_minutes\n        );\n      } else {\n        // Fallback just in case the AI missed the dates\n        actuator.re_evaluation.interval.start = null;\n        actuator.re_evaluation.interval.end = null;\n      }\n      \n    } else if (decision.action === \"PROCEED\") {\n      // If proceeding, we leave the base classification intact\n      actuator.re_evaluation.active = false;\n      actuator.re_evaluation.interval.start = null;\n      actuator.re_evaluation.interval.end = null;\n      \n      // Ensure recommended_action is cleared since it's not needed for PROCEED here\n      actuator.recommended_action = null; \n    }\n  }\n}\n\n// 4. Return the fully merged and updated environmental data\nreturn [{ json: mainData }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2704,
+        448
+      ],
+      "id": "f38e954f-3e74-4d1d-884c-e6ac1bae6794",
+      "name": "continue_execution"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=CURRENT TIME:\n{{ $json.time }}\n\n─── ENVIRONMENTAL DATA ────────────────────────────────────────────────────────\nCROP:\nType: {{ $json.crop.type }}, Growth Stage: {{ $json.crop.growth_stage }}, Mode of the farm: {{ $json.crop.mode }}\n\nSENSORS:\n{{ JSON.stringify($json.sensors) }}\n\nWEATHER HIGHLIGHTS:\nState: {{ $json.weather.state }}\nSummary: {{ $json.weather.summary }}\n\nCAMERA FEATURES:\nsummary of the scene: {{ $json.image_processing.summary }}\n\n\n─── ACTUATORS TO SCHEDULE ─────────────────────────────────────────────────────\n{{ JSON.stringify($json.actuators.auto, null, 2) }}\n\n─── TASK ──────────────────────────────────────────────────────────────────────\nFor each actuator listed above, provide the ACTUATOR, REASONING, EXECUTE_AT, and DURATION_MINUTES using the exact text block format specified. Remember the +2 minutes rule for immediate execution!\n\nOutput ONLY the text blocks.",
+        "options": {
+          "systemMessage": "You are the Auto Mode Scheduling Agent in an agricultural AI pipeline.\n\n─── YOUR ROLE & CONTEXT ───────────────────────────────────────────────────────\nYou operate at Layer 2 of the pipeline. The preceding Layer 1 Re-evaluation Agents have already audited the environmental conditions and confirmed that the actuators in your queue are safe and necessary to run (their classification is \"TURN-ON\"). \nYour SOLE RESPONSIBILITY is to decide exactly WHEN to start each actuator, HOW LONG it should run, and provide your REASONING based on the current environmental data and the farm's operating mode.\n\n─── FARM OPERATING MODES (CRITICAL INFLUENCE) ─────────────────────────────────\nThe farm's \"Mode\" dictates your scheduling and duration strategy. You MUST adjust your logic based on whichever mode is currently active:\n\n- BALANCED: Standard operation. Aim for optimal plant health while using resources moderately. Schedule actions at standard optimal times and use average durations.\n- GROWTH_PRIORITY: Maximize plant health and yield at all costs. React aggressively to sensor data. Use longer durations to ensure the crop's needs are fully satisfied.\n- WATER_SAVING: Strictly conserve water. Keep pump durations as short as possible (just enough to prevent wilting). Unless soil moisture is critically low, actively delay watering schedules to cooler times of the day (e.g., late evening or early morning) to prevent evaporation.\n- ENERGY_SAVING: Strictly conserve electricity. Keep fan and pump durations to the minimum required. Delay running devices unless the crop is nearing critical stress thresholds. \n\nTHE PLANT'S HEALTH MUST BE TAKEN INTO CONSIDERATION IN EACH OF THESE MODES\n\n─── SCHEDULING RULES (CRITICAL) ───────────────────────────────────────────────\n1. IMMEDIATE EXECUTION LIMIT: You cannot schedule an action for the exact current time. If an actuator needs to run immediately, you MUST schedule its start time at least 2 minutes AFTER the provided CURRENT TIME.\n2. DELAYED EXECUTION: If environmental data or the Farm Mode suggests waiting (e.g., water_saving mode delaying a pump until evening), you can schedule the start time further in the future.\n3. DURATION: You must define a logical duration in minutes based on the crop's needs, sensor readings, and the current Farm Mode.\n4. REASONING: Briefly explain why you chose the specific start time and duration, explicitly referencing the Farm Mode if it influenced your decision.\n\n─── OUTPUT FORMAT & ANTI-HALLUCINATION RULES (STRICT) ─────────────────────────\n1. You must process the provided actuators EXACTLY 1-to-1. Do not duplicate actuators. Evaluate each exactly once.\n2. DO NOT use JSON. Do not output markdown, introductory text, or conversational filler.\n3. DELIMITER RULES (CRITICAL): \n   - The exact delimiter between each field of a single actuator MUST be a single newline character (\\n). Do not use double newlines.\n   - The exact delimiter between two DIFFERENT actuator blocks MUST be exactly \"\\n---\\n\".\n4. Format each block exactly as shown below:\n\nACTUATOR: [actuator type]\nREASONING: [your brief explanation]\nEXECUTE_AT: [YYYY-MM-DDTHH:mm:ssZ]\nDURATION_MINUTES: [integer]\n---\n\n─── EXAMPLES ──────────────────────────────────────────────────────────────────\nEXAMPLE 1: Single Actuator (Immediate Run, Growth Priority)\nCurrent Time: 2026-04-28T08:00:00+01:00\nOutput:\nACTUATOR: pump\nREASONING: Soil moisture is slightly low. Because the farm is in growth_priority mode, we are scheduling immediately (+2 mins) with a longer duration to guarantee optimal hydration.\nEXECUTE_AT: 2026-04-28T08:02:00+01:00\nDURATION_MINUTES: 30\n---\n\nEXAMPLE 2: Two Actuators Input (Observe the exact delimiters)\nCurrent Time: 2026-04-28T14:30:00+01:00\nOutput:\nACTUATOR: fan\nREASONING: Temperature is high, but under energy_saving mode, we run the fan for a shorter duration just to take the edge off the heat. Scheduling immediately (+2 mins).\nEXECUTE_AT: 2026-04-28T14:32:00+01:00\nDURATION_MINUTES: 15\n---\nACTUATOR: pump\nREASONING: Soil moisture is low, but under water_saving mode, it is too hot to water right now due to high evaporation. Delaying watering until the late afternoon.\nEXECUTE_AT: 2026-04-28T17:30:00+01:00\nDURATION_MINUTES: 10\n---\n─── REMARK (CRITICAL TIMEZONE RULE) ───────────────────────────────────────────\nWhen calculating EXECUTE_AT, you MUST preserve the exact timezone offset provided in the CURRENT TIME input. Do NOT convert the time to UTC or change the offset under any circumstances (e.g., if the input ends in +01:00, your output must end in +01:00, NEVER Z)."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        3504,
+        288
+      ],
+      "id": "43afd639-af31-467b-b9db-d815ae1d3dad",
+      "name": "auto"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=CURRENT TIME:\n{{ $json.time }}\n\n─── ENVIRONMENTAL DATA ────────────────────────────────────────────────────────\nCROP:\nType: {{ $json.crop.type }}, Growth Stage: {{ $json.crop.growth_stage }}, Mode of the farm: {{ $json.crop.mode }}\n\nSENSORS:\n{{ JSON.stringify($json.sensors) }}\n\nWEATHER HIGHLIGHTS:\nState: {{ $json.weather.state }}\nSummary: {{ $json.weather.summary }}\n\nCAMERA FEATURES:\nScene Summary: {{ $json.image_processing.summary }}\n\n─── ACTUATORS TO EVALUATE ─────────────────────────────────────────────────────\n{{ JSON.stringify($json.actuators.semi_auto, null, 2) }}\n\n─── TASK ──────────────────────────────────────────────────────────────────────\nEvaluate the actuators listed above. \nCRITICAL: You must generate EXACTLY ONE text block per actuator listed above. Do not duplicate any actuator. End every block with the \"---\" separator.\n\nOutput ONLY the text blocks.",
+        "options": {
+          "systemMessage": "You are the Semi-Auto Mode Recommendation Agent in an agricultural AI pipeline.\n\n─── YOUR ROLE & CONTEXT ───────────────────────────────────────────────────────\nYou operate at Layer 2 of the pipeline. A preliminary Layer 1 agent has already evaluated these \"semi-auto\" actuators and assigned them a target `classification`. \nYour SOLE RESPONSIBILITY is to act as the final auditor: analyze the environmental data, review the preliminary classification, and generate a final, clear RECOMMENDATION for the human farmer. The user has total freedom to comply with your advice or ignore it.\n\nYou must not schedule execution times. You must not decide duration times.\n\n─── UNDERSTANDING INPUT CLASSIFICATION & CURRENT STATE (CRITICAL) ─────────────\nLook at the `classification` field for each actuator in your input. This tells you the preliminary agent's decision AND the current physical state of the device:\n- If input is \"TURN-ON\": The device is currently OFF. The preliminary agent wants to start it.\n- If input is \"KEEP-ON\": The device is currently ON. The preliminary agent wants to let it keep running.\n- If input is \"TURN-OFF\": The device is currently ON. The preliminary agent wants to stop it.\n\n─── ALLOWED ACTIONS & STATE LOGIC ─────────────────────────────────────────────\nYou must choose exactly ONE of these three actions for each actuator, and it MUST logically match the device's current state:\n- TURN-ON: Use this to recommend starting the device. (ONLY valid if the device is currently OFF).\n- KEEP-ON: Use this to recommend leaving the device running. (ONLY valid if the device is currently ON).\n- TURN-OFF: Use this to recommend stopping the device, OR to advise the user *not* to turn it on. (Valid in any state).\n\n─── FARM OPERATING MODES (CRITICAL INFLUENCE) ─────────────────────────────────\nThe farm's \"Mode\" dictates your recommendation strategy:\n- BALANCED: Standard operation. Aim for optimal plant health while using resources moderately.\n- GROWTH_PRIORITY: Maximize plant health and yield at all costs. React aggressively to sensor data.\n- WATER_SAVING: Strictly conserve water. Recommend delaying pump usage unless soil moisture is critically low.\n- ENERGY_SAVING: Strictly conserve electricity. Recommend keeping fans and pumps off unless the crop is nearing critical stress thresholds.\n\n─── OUTPUT FORMAT & ANTI-HALLUCINATION RULES (STRICT) ─────────────────────────\n1. You must process the provided actuators EXACTLY 1-to-1. Do not duplicate actuators. Evaluate each exactly once.\n2. DO NOT use JSON. Do not output markdown, introductory text, or conversational filler.\n3. DELIMITER RULES (CRITICAL): \n   - The exact delimiter between each field of a single actuator MUST be a single newline character (\\n). Do not use double newlines.\n   - The exact delimiter between two DIFFERENT actuator blocks MUST be exactly \"\\n---\\n\".\n4. Format each block exactly as shown below:\n\nACTUATOR: [actuator type]\nACTION: [TURN-ON | TURN-OFF | KEEP-ON]\nREASONING: [Address the user directly. Briefly explain your recommendation, referencing the Farm Mode.]\n---\n\n─── EXAMPLES ──────────────────────────────────────────────────────────────────\nEXAMPLE 1: Agreeing with preliminary TURN-ON (Currently OFF)\nInput: [{\"type\": \"fan\", \"classification\": \"TURN-ON\"}]\nOutput:\nACTUATOR: fan\nACTION: TURN-ON\nREASONING: Since we are in growth_priority mode and humidity is high, I agree with turning the fan on to prevent any risk of fungal growth.\n---\n\nEXAMPLE 2: Disagreeing with preliminary TURN-ON (Currently OFF)\nInput: [{\"type\": \"pump\", \"classification\": \"TURN-ON\"}]\nOutput:\nACTUATOR: pump\nACTION: TURN-OFF\nREASONING: The preliminary system suggested turning the pump on, but because we are in water_saving mode and afternoon evaporation is high, I recommend keeping it off for now.\n---\n\nEXAMPLE 3: Two Actuators Input (Observe the exact delimiters)\nInput: [{\"type\": \"fan\", \"classification\": \"TURN-ON\"}, {\"type\": \"pump\", \"classification\": \"KEEP-ON\"}]\nOutput:\nACTUATOR: fan\nACTION: TURN-OFF\nREASONING: The preliminary system suggested turning the fan on, but strong natural gusts are already cooling the greenhouse. I recommend leaving it off to save energy.\n---\nACTUATOR: pump\nACTION: KEEP-ON\nREASONING: Soil moisture is still only 18%. To maximize seedling growth under balanced mode, please keep the pump running until the soil reaches optimal saturation.\n---"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        3504,
+        592
+      ],
+      "id": "c8b73df3-812d-4e54-86c7-13b031700fa1",
+      "name": "semi_auto"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        3920,
+        448
+      ],
+      "id": "a85eec0d-4b01-4ea3-a981-aeaec1cf3d20",
+      "name": "Merge2"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=─── 1. RAW ENVIRONMENTAL DATA (SOURCE OF TRUTH) ───────────────────────────────\nCURRENT TIME:\n{{ $('split_modes').item.json.time }}\n\nCROP:\nType: {{ $('split_modes').item.json.crop.type }}, Stage: {{ $('split_modes').item.json.crop.growth_stage }}, Mode: {{ $('split_modes').item.json.crop.mode }}\n\nSENSORS:\n{{ JSON.stringify($('split_modes').item.json.sensors) }}\n\nWEATHER & CAMERA:\nWeather: {{ $('split_modes').item.json.weather.summary }}\nCamera: {{ $('split_modes').item.json.image_processing.summary }}\nconfidence in the claim ( it is rainy / it is going to rain ) : {{ $('split_modes').item.json.image_processing.confidence_rain }}\n( if bellow 60 ignore the parts of the summary related to rain )\nconfidence in the claim ( it is rainy windy ) : {{ $('split_modes').item.json.image_processing.confidence_wind }}\n( if bellow 60 ignore the parts of the summary related to wind )\n\nACTUATORS TO PROCESS:\nAuto: {{ JSON.stringify($('split_modes').item.json.actuators.auto, null, 2) }}\nSemi-Auto: {{ JSON.stringify($('split_modes').item.json.actuators.semi_auto, null, 2) }}\n\n─── 2. DRAFT DECISIONS TO AUDIT ───────────────────────────────────────────────\nAUTO DRAFTS:\n{{ $json.auto }}\n\nSEMI-AUTO DRAFTS:\n{{ $json.semi_auto }}\n\n─── TASK ──────────────────────────────────────────────────────────────────────\nAudit the draft decisions against the raw environmental data and rules. Fix any logical errors, missing actuators, or formatting mistakes. \nOutput the final, perfectly formatted text blocks adhering strictly to the \"\\n\" and \"\\n---\\n\" delimiter rules. Output ONLY the text blocks.",
+        "options": {
+          "systemMessage": "You are the Final Correction Agent (Layer 3 Auditor) in an agricultural AI pipeline.\n\n─── YOUR ROLE & CONTEXT ───────────────────────────────────────────────────────\nYou are the final gatekeeper. You will receive draft decisions made by Layer 2 Auto and Semi-Auto agents, along with the raw environmental data. \nYour SOLE RESPONSIBILITY is to review their logic, correct any hallucinations, ensure physical constraints are met, and output the final, perfectly formatted decisions.\n\n─── FARM OPERATING MODES (CRITICAL INFLUENCE) ─────────────────────────────────\nBoth you and the previous agents must adhere to the current Farm Mode:\n- BALANCED: Standard operation. Moderate resource usage.\n- GROWTH_PRIORITY: Maximize health/yield. React aggressively to stress.\n- WATER_SAVING: Strictly conserve water. Delay pump usage unless critical.\n- ENERGY_SAVING: Strictly conserve electricity. Keep fans/pumps off unless critical.\n\n─── AUTO ACTUATOR RULES (STRICT) ──────────────────────────────────────────────\nIf an actuator's control mode is \"auto\", the previous agent should have scheduled it. You must verify:\n1. +2 MINUTE RULE: Execution time MUST be at least 2 minutes AFTER the current time. \n2. DURATION: Must have a logical integer duration based on the Farm Mode.\n3. FORMAT: Must contain ACTUATOR, REASONING, EXECUTE_AT, and DURATION_MINUTES.\n\n─── SEMI-AUTO ACTUATOR RULES (STRICT) ─────────────────────────────────────────\nIf an actuator's control mode is \"semi-auto\", the previous agent provided a recommendation. You must verify the state logic based on the input `classification`:\n- \"TURN-ON\" (Currently OFF): Valid actions are TURN-ON or TURN-OFF (do not turn on). KEEP-ON is physically impossible.\n- \"KEEP-ON\" (Currently ON): Valid actions are KEEP-ON or TURN-OFF. TURN-ON is impossible.\n- \"TURN-OFF\" (Currently ON): Valid actions are TURN-OFF or KEEP-ON.\n- FORMAT: Must contain ACTUATOR, ACTION, and REASONING. No times or durations.\n\n─── OUTPUT FORMAT & ANTI-HALLUCINATION RULES (STRICT) ─────────────────────────\n1. Process every actuator listed in the raw data EXACTLY 1-to-1. Do not drop any. Do not duplicate any.\n2. DO NOT use JSON. Do not output markdown or conversational filler.\n3. DELIMITER RULES (CRITICAL): \n   - The exact delimiter between each field of a single actuator MUST be a single newline character (\\n).\n   - The exact delimiter between two DIFFERENT actuator blocks MUST be exactly \"\\n---\\n\".\n   - The exact delimiter at the end of the output must be \\n---\n4. Output the corrected \"auto\" blocks first (if any), followed by the corrected \"semi-auto\" blocks (if any).\n\nAuto Block Format:\nACTUATOR: [type]\nREASONING: [Corrected reasoning]\nEXECUTE_AT: [Corrected time]\nDURATION_MINUTES: [Corrected integer]\n\nSemi-Auto Block Format:\nACTUATOR: [type]\nACTION: [Corrected action]\nREASONING: [Corrected reasoning]\n\n\n\nREMARK: make the reasoning short, one sentence at max"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        4384,
+        448
+      ],
+      "id": "1ad23f97-52bf-40d2-ad13-e97129a88554",
+      "name": "final_correction"
+    },
+    {
+      "parameters": {
+        "model": "qwen/qwen-2.5-7b-instruct",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        1424,
+        448
+      ],
+      "id": "fa059a02-f3be-4934-803c-c734293ed259",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "TdYWM8n7dy3m5PFp",
+          "name": "OpenRouter account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "qwen/qwen-2.5-7b-instruct",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        1424,
+        800
+      ],
+      "id": "9f318862-5442-4a4e-bc7d-9465d3ead891",
+      "name": "OpenRouter Chat Model1",
+      "credentials": {
+        "openRouterApi": {
+          "id": "XhyoNfvtIyYoxb5p",
+          "name": "OpenRouter account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "meta-llama/llama-3-8b-instruct",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        3504,
+        816
+      ],
+      "id": "b57ecd94-af4c-4701-881a-695b88c514c0",
+      "name": "OpenRouter Chat Model2",
+      "credentials": {
+        "openRouterApi": {
+          "id": "dCqDpmdKT6t25fwb",
+          "name": "OpenRouter account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "qwen/qwen-2.5-7b-instruct",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        3504,
+        448
+      ],
+      "id": "1118f70b-4240-4c60-bcd0-75648a641a91",
+      "name": "OpenRouter Chat Model3",
+      "credentials": {
+        "openRouterApi": {
+          "id": "dCqDpmdKT6t25fwb",
+          "name": "OpenRouter account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-safeguard-20b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        4384,
+        640
+      ],
+      "id": "0a8f1eb6-59fc-4da4-8f3e-5bfc476ad539",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "2jGnwsFkMxyZg18F",
+          "name": "Groq account 12"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const combinedResult = {};\n\nfor (const item of $input.all()) {\n  // Get the raw string from the agent\n  const rawOutput = item.json.output;\n  \n  // Split the string by the pipe character\n  const parts = rawOutput.split('|');\n  \n  // Ensure we actually have at least the actuator and action\n  if (parts.length >= 2) {\n    // .trim() removes any extra spaces around the words \n    // so \"fan | PROCEED\" and \"fan|PROCEED\" are treated the same\n    let actuatorName = parts[0].trim();\n    const action = parts[1].trim();\n    const reasoning = parts.length > 2 ? parts[2].trim() : \"\";\n    \n    // Add the cleaned object to our final structure\n    combinedResult[actuatorName] = {\n      action: action,\n      reasoning: reasoning\n    };\n  }\n}\n\n// Return exactly ONE item\nreturn [{ json: combinedResult }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2032,
+        448
+      ],
+      "id": "eeee13aa-9c00-4106-90a9-fa170856f71f",
+      "name": "combine_output"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "d3b253b7-9e88-44ef-956c-9930589f3bde",
+              "leftValue": "={{ $json.actuators }}",
+              "rightValue": "",
+              "operator": {
+                "type": "array",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        784,
+        464
+      ],
+      "id": "3bcd6660-d02b-4ace-85e7-f1e1b2b62e24",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "6dc9c894-46ae-49b8-a176-1af837f4c010",
+              "leftValue": "={{ $json.actuators.some(a => a.type === 'pump') }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        976,
+        288
+      ],
+      "id": "6158d368-92a3-4649-9b64-c3f4b869ff4f",
+      "name": "If2"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "6dc9c894-46ae-49b8-a176-1af837f4c010",
+              "leftValue": "={{ $json.actuators.some(a => a.type === 'fan') }}",
+              "rightValue": 2,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        976,
+        640
+      ],
+      "id": "5c285c4b-bb91-4009-8c19-6f135b871862",
+      "name": "If3"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nfor (const item of $input.all()) {\n  item.json.myNewField = 1;\n}\n\nreturn {\n  \"output\": \"pump | IGNORE | actuator filtered out\"\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        128
+      ],
+      "id": "da608c72-dd4a-49c5-bcf0-ad4b1fdd2486",
+      "name": "fall_back_no_pump"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nfor (const item of $input.all()) {\n  item.json.myNewField = 1;\n}\n\nreturn {\n  \"output\": \"fan | IGNORE | actuator filtered out\"\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        816
+      ],
+      "id": "1eac854b-e090-4fb5-ac4b-1fb2b48bfddd",
+      "name": "fall_back_no_fan"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Get the base structure from the \"parse_history\" node using a deep copy\nlet historyData = JSON.parse(JSON.stringify($('parse_history').first().json));\n\n// 2. Get the updated actuators from the current node's input \nlet updatedActuators = $input.first().json.actuators || [];\n\n// 3. Initialize the categorized actuators object\nlet categorizedActuators = {\n  \"auto\": [],\n  \"semi_auto\": []\n};\n\n// 4. Loop through the updated actuators, filter, format, and sort them\nfor (let actuator of updatedActuators) {\n  \n  // --- NEW FILTERING LOGIC ---\n  // Only allow actuators that need to be turned on or kept on\n  if (actuator.classification !== \"TURN-ON\" && actuator.classification !== \"KEEP-ON\") {\n    continue; // Skip this actuator and move to the next one\n  }\n  \n  // Map to the simplified structure requested for the next stage\n  let formattedActuator = {\n    \"type\": actuator.type,\n    \"classification\": actuator.classification,\n    \"control_mode\": actuator.control_mode,\n    \"run\": {\n      \"execute_at\": actuator.run && actuator.run.execute_at !== undefined ? actuator.run.execute_at : null,\n      \"execute_until\": actuator.run && actuator.run.execute_until !== undefined ? actuator.run.execute_until : null\n    },\n    \"re_evaluation\": {\n      \"start\": actuator.re_evaluation && actuator.re_evaluation.interval ? actuator.re_evaluation.interval.start : null,\n      \"end\": actuator.re_evaluation && actuator.re_evaluation.interval ? actuator.re_evaluation.interval.end : null\n    }\n  };\n\n  // 5. Route to the correct array based on control_mode\n  if (actuator.control_mode === \"auto\") {\n    categorizedActuators.auto.push(formattedActuator);\n  } else if (actuator.control_mode === \"semi-auto\" || actuator.control_mode === \"semi_auto\") {\n    categorizedActuators.semi_auto.push(formattedActuator);\n  }\n}\n\n// 6. Replace the old actuators array in the historyData with the new categorized object\nhistoryData.actuators = categorizedActuators;\n\n// 7. Output the final reshaped JSON\nreturn [{ json: historyData }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2912,
+        448
+      ],
+      "id": "a91311fb-a753-4914-8ac2-6577463e9e98",
+      "name": "split_modes"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "86a109ff-0223-46d7-b8f4-c4910ccce07e",
+              "leftValue": "={{ $json.actuators.auto }}",
+              "rightValue": "",
+              "operator": {
+                "type": "array",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3104,
+        304
+      ],
+      "id": "116c5c48-e3c2-42d5-a22f-5904d51aca54",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "86a109ff-0223-46d7-b8f4-c4910ccce07e",
+              "leftValue": "={{ $json.actuators.semi_auto }}",
+              "rightValue": "",
+              "operator": {
+                "type": "array",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3104,
+        608
+      ],
+      "id": "eb7dfc3f-dff0-4740-865c-e897e0657ef8",
+      "name": "If4"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nfor (const item of $input.all()) {\n  item.json.myNewField = 1;\n}\n\nreturn {output:\"not actuators in auto mode\"};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3296,
+        176
+      ],
+      "id": "550e5f5c-c3b3-4ec8-b0f2-591bf2634c07",
+      "name": "Bypass Auto Agent"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nfor (const item of $input.all()) {\n  item.json.myNewField = 1;\n}\n\nreturn  {output:\"no actuators in semi-auto mode\"};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3296,
+        752
+      ],
+      "id": "6746e641-c6fa-4b66-9bfe-58f54740ad68",
+      "name": "Bypass Semi-Auto Agent"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get all items coming from the Merge node\nconst items = $input.all();\n\n// items[0] corresponds to Input 1 (Auto branch)\n// items[1] corresponds to Input 2 (Semi-Auto branch)\nconst autoOutput = items[0].json.output;\nconst semiAutoOutput = items[1].json.output;\n\n// Return them combined into a single JSON object\nreturn {\n  auto: autoOutput,\n  semi_auto: semiAutoOutput\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4128,
+        448
+      ],
+      "id": "a6c86f8d-900d-4865-9baa-e2c17e2ec494",
+      "name": "combine_output1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─── Helper Functions ────────────────────────────────────────────────────────\n// Calculate execute_until while preserving the AI's timezone offset strictly\nfunction calculateExecuteUntil(isoString, minutesToAdd) {\n    if (!isoString || typeof minutesToAdd !== 'number') return null;\n    const d = new Date(isoString);\n    if (isNaN(d.getTime())) return null; \n\n    // Add the duration\n    d.setMinutes(d.getMinutes() + minutesToAdd);\n    \n    // Extract original timezone offset (e.g., \"+01:00\" or \"Z\") from the AI string\n    const tzMatch = isoString.match(/([+-]\\d{2}:\\d{2}|Z)$/);\n    const tz = tzMatch ? tzMatch[1] : 'Z'; // Default to Z if none found\n\n    // Convert the offset into total minutes\n    let offsetTotal = 0;\n    if (tz !== 'Z') {\n        const sign = tz.startsWith('+') ? 1 : -1;\n        const hours = parseInt(tz.substring(1, 3), 10);\n        const mins = parseInt(tz.substring(4, 6), 10);\n        offsetTotal = sign * ((hours * 60) + mins);\n    }\n\n    // Shift the date temporarily so standard UTC methods output your local time correctly\n    const local = new Date(d.getTime() + (offsetTotal * 60000));\n    \n    // Reconstruct the string manually with the original offset (Guarantees NO milliseconds)\n    const pad = (n) => String(n).padStart(2, '0');\n    return `${local.getUTCFullYear()}-${pad(local.getUTCMonth() + 1)}-${pad(local.getUTCDate())}T${pad(local.getUTCHours())}:${pad(local.getUTCMinutes())}:${pad(local.getUTCSeconds())}${tz}`;\n}\n\n// ─── Main Execution ──────────────────────────────────────────────────────────\n\n// 1. Fetch the original structure using .first().json for strict n8n legacy compatibility\nconst originalState = $('continue_execution').first().json;\nlet updatedState = JSON.parse(JSON.stringify(originalState));\n\n// 2. Fetch the text output from the Final Correction Agent\nconst agentText = $input.first().json.output || \"\"; \n\n// 3. Parse the Agent's text blocks into a structured dictionary\nconst parsedDecisions = {};\nconst blocks = agentText.split(/\\n*---\\n*/);\n\nblocks.forEach(block => {\n    if (!block.trim() || block.includes(\"no actuators\")) return;\n    \n    let actuatorType = \"\";\n    let action = \"\";\n    let reasoning = \"\";\n    let executeAt = null;\n    let duration = null;\n\n    // Read line by line to extract variables\n    const lines = block.split('\\n');\n    lines.forEach(line => {\n        if (line.startsWith('ACTUATOR:')) actuatorType = line.replace('ACTUATOR:', '').trim();\n        else if (line.startsWith('ACTION:')) action = line.replace('ACTION:', '').trim();\n        else if (line.startsWith('REASONING:')) reasoning = line.replace('REASONING:', '').trim();\n        else if (line.startsWith('EXECUTE_AT:')) executeAt = line.replace('EXECUTE_AT:', '').trim();\n        else if (line.startsWith('DURATION_MINUTES:')) duration = parseInt(line.replace('DURATION_MINUTES:', '').trim(), 10);\n    });\n\n    if (actuatorType) {\n        parsedDecisions[actuatorType] = { action, reasoning, executeAt, duration };\n    }\n});\n\n// 4. Update the actuators and collect recommendations\nlet globalRecommendations = [];\n\nupdatedState.actuators.forEach(actuator => {\n    // PRESERVE NEED-RE-EVALUATION ACTUATORS\n    if (actuator.classification === 'NEED-RE-EVALUATION') {\n        // Skip modifying this actuator entirely.\n        // Its recommended_action stays intact, and we do not add it to globalRecommendations.\n        return; \n    }\n\n    const decision = parsedDecisions[actuator.type];\n    \n    if (decision) {\n        // Change from 'recommendation' to 'recommended_action'\n        actuator.recommended_action = decision.reasoning;\n        \n        // Strip trailing periods from AI string to prevent \".. \" when joined\n        let safeReasoning = decision.reasoning.trim().replace(/\\.$/, '');\n        globalRecommendations.push(safeReasoning);\n        \n        // --- AUTO ACTUATORS ---\n        if (actuator.control_mode === 'auto') {\n            actuator.classification = 'TURN-ON'; \n            actuator.status = 'on';\n            actuator.run.active = true;\n            \n            actuator.run.execute_at = decision.executeAt;\n            actuator.run.duration_minutes = decision.duration;\n            \n            // Calculate execute_until using precise timezone formatting\n            actuator.run.execute_until = calculateExecuteUntil(decision.executeAt, decision.duration);\n        } \n        // --- SEMI-AUTO ACTUATORS ---\n        else if (actuator.control_mode === 'semi-auto' || actuator.control_mode === 'semi_auto') {\n            actuator.classification = decision.action;\n            \n            if (decision.action === 'TURN-ON' || decision.action === 'KEEP-ON') {\n                actuator.run.active = true;\n                actuator.status = \"on\";\n            } else {\n                actuator.run.active = false;\n                actuator.status = \"off\";\n            }\n            \n            actuator.run.execute_at = null;\n            actuator.run.duration_minutes = null;\n            actuator.run.execute_until = null;\n        }\n    } else {\n        // Ensure recommended_action is explicitly null if no decision is made\n      if (actuator.classification !== 'TURN-OFF'){\n        actuator.recommended_action = null; \n        \n      }\n      if(actuator.classification === 'TURN-OFF'){\n        globalRecommendations.push(actuator.recommended_action)\n      }\n    }\n});\n\n// 5. Append global recommendation using the \". \" delimiter\nif (globalRecommendations.length > 0) {\n    // Add the final period back to the very end of the summarized string\n    updatedState.recommendation = globalRecommendations.join('. ') + '.';\n} else {\n    updatedState.recommendation = \"No recommended actions or indications for now.\";\n}\n\n// 6. Return the fully updated state in n8n's expected JSON array wrapper\nreturn [{ json: updatedState }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4736,
+        448
+      ],
+      "id": "18cd8b26-ac29-43be-8e3e-93e59a9232e2",
+      "name": "final_decision"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Fetch the original structure explicitly from \"Merge the results\" \nconst originalState = $('Merge the results').first().json;\n\n// Create a deep copy so we can safely modify it\nlet updatedState = JSON.parse(JSON.stringify(originalState));\n\n// 2. Set the global recommendation for the bypass scenario\nupdatedState.recommendation = \"No recommended actions or indications for now.\";\n\n// 3. Loop through all actuators and add the recommended_action field set to null\nif (updatedState.actuators && Array.isArray(updatedState.actuators)) {\n    updatedState.actuators.forEach(actuator => {\n        actuator.recommended_action = null;\n    });\n}\n\n// 4. Return the fully updated state in n8n's expected JSON array wrapper\nreturn [{ json: updatedState }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4704,
+        816
+      ],
+      "id": "99661917-b602-4fae-8774-d5aaed140547",
+      "name": "bypass_ai"
+    },
+    {
+      "parameters": {
+        "jsCode": "\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5024,
+        448
+      ],
+      "id": "515d6e52-3c17-4efc-8644-4f41e796a2e0",
+      "name": "Code in JavaScript"
+    }
+  ],
+  "pinData": {
+    "Weather_Fetcher + Image_Processing": [
+      {
+        "json": {
+          "meta": {
+            "run_id": "d471b9-147929a63ab1",
+            "triggered_at": "2026-04-29T09:29:04+01:00",
+            "adr": "10.151.207.237"
+          },
+          "location": {
+            "latitude": 36.716781245509864,
+            "longitude": 3.1546447886010713,
+            "timezone": "Africa/Algiers"
+          },
+          "crop": {
+            "type": "Carrot",
+            "growth_stage": "Seedling",
+            "mode": "Balanced"
+          },
+          "sensors": [
+            {
+              "type": "soil_moisture",
+              "value": 12,
+              "description": null
+            },
+            {
+              "type": "temperature",
+              "value": 25,
+              "description": null
+            },
+            {
+              "type": "air_humidity",
+              "value": 30,
+              "description": null
+            },
+            {
+              "type": "luminosity",
+              "value": 85000,
+              "description": null
+            }
+          ],
+          "actuators": [
+            {
+              "type": "pump",
+              "status": "off",
+              "control_mode": "semi-auto",
+              "classification": "TURN-ON",
+              "skipped": false,
+              "run": {
+                "active": false,
+                "execute_at": null,
+                "duration_minutes": null,
+                "execute_until": null
+              },
+              "re_evaluation": {
+                "active": true,
+                "skipped": false,
+                "interval": {
+                  "start": "2026-04-29T09:00:00+01:00",
+                  "end": "2026-04-29T10:00:00+01:00"
+                }
+              }
+            },
+            {
+              "type": "fan",
+              "status": "on",
+              "control_mode": "semi-auto",
+              "classification": "TURN-OFF",
+              "skipped": false,
+              "run": {
+                "active": false,
+                "execute_at": null,
+                "duration_minutes": null,
+                "execute_until": null
+              },
+              "re_evaluation": {
+                "active": false,
+                "skipped": false,
+                "interval": {
+                  "start": null,
+                  "end": null
+                }
+              },
+              "recommended_action": "Temperature 25°C and 30% humidity are within acceptable ranges; no ventilation needed."
+            }
+          ],
+          "notifications": null,
+          "warnings": [
+            {
+              "name": "frost_risk",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "heavy_rainfall",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "high_humidity_level",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "high_temperature_detected",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "insufficient_sunlight",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "excessive_sunlight",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "low_soil_moisture",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "overwatering",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "strong_wind",
+              "active": true,
+              "severity": null,
+              "description": null
+            }
+          ],
+          "recommendation": null,
+          "weather": {
+            "precipitation_probability": 23,
+            "state": "cloudy",
+            "summary": "The next 48 hours in Algiers will be characterized by relatively stable temperatures in the range of 16.5°C to 22.9°C with a gradual increase until midday tomorrow. There is a low risk of scattered showers early tomorrow morning, followed by a mix of sun and clouds throughout the day. Expect dry conditions and comfortable temperatures with no extreme heat peaks anticipated.",
+            "insights": {
+              "highlights": {
+                "max_temperature": {
+                  "value": 22.9,
+                  "time": "2026-04-30T13:00:00+01:00"
+                },
+                "min_temperature": {
+                  "value": 16.3,
+                  "time": "2026-04-30T04:00:00+01:00"
+                }
+              },
+              "hourly": [
+                {
+                  "time": "2026-04-29T00:00:00+01:00",
+                  "temperature": 17.2,
+                  "humidity": 96,
+                  "precipitation_probability": 3
+                },
+                {
+                  "time": "2026-04-29T03:00:00+01:00",
+                  "temperature": 17.3,
+                  "humidity": 93,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-29T06:00:00+01:00",
+                  "temperature": 17.1,
+                  "humidity": 95,
+                  "precipitation_probability": 20
+                },
+                {
+                  "time": "2026-04-29T09:00:00+01:00",
+                  "temperature": 19.4,
+                  "humidity": 81,
+                  "precipitation_probability": 18
+                },
+                {
+                  "time": "2026-04-29T12:00:00+01:00",
+                  "temperature": 21.9,
+                  "humidity": 70,
+                  "precipitation_probability": 5
+                },
+                {
+                  "time": "2026-04-29T15:00:00+01:00",
+                  "temperature": 21.7,
+                  "humidity": 69,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-29T18:00:00+01:00",
+                  "temperature": 20.6,
+                  "humidity": 75,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-29T21:00:00+01:00",
+                  "temperature": 18.6,
+                  "humidity": 86,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-30T00:00:00+01:00",
+                  "temperature": 17.1,
+                  "humidity": 93,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-30T03:00:00+01:00",
+                  "temperature": 16.4,
+                  "humidity": 99,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-30T06:00:00+01:00",
+                  "temperature": 16.5,
+                  "humidity": 96,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-30T09:00:00+01:00",
+                  "temperature": 19.1,
+                  "humidity": 81,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-30T12:00:00+01:00",
+                  "temperature": 22.2,
+                  "humidity": 67,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-30T15:00:00+01:00",
+                  "temperature": 22.5,
+                  "humidity": 67,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-30T18:00:00+01:00",
+                  "temperature": 20.6,
+                  "humidity": 75,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-30T21:00:00+01:00",
+                  "temperature": 18.2,
+                  "humidity": 91,
+                  "precipitation_probability": 3
+                }
+              ]
+            }
+          },
+          "history": {
+            "runs": null
+          },
+          "image_processing": {
+            "summary": null,
+            "features": {
+              "rain_detected": null,
+              "water_on_leaves": null,
+              "cloud_cover": null,
+              "lighting_level": null,
+              "shadows_present": null,
+              "plant_motion_detected": null,
+              "motion_intensity": null
+            },
+            "confidence_rain": null,
+            "confidence_wind": null
+          }
+        }
+      },
+      {
+        "json": {
+          "summary": "The image shows a field of corn with a clear blue sky and some clouds. The plants appear to be standing straight, and there is no visible rain or water on the leaves. The lighting is bright, and distinct shadows are present. There is no noticeable motion in the plants.\n\nClear, brightly lit environment with distinct shadows; plants are standing straight with no visible motion; surfaces appear dry with no rain observed.",
+          "features": {
+            "rain_detected": false,
+            "water_on_leaves": false,
+            "cloud_cover": "low",
+            "lighting_level": "high",
+            "shadows_present": true,
+            "plant_motion_detected": false,
+            "motion_intensity": null
+          },
+          "confidence_rain": 100,
+          "confidence_wind": 100
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Groq Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "correct_re_evaluation",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge the results": {
+      "main": [
+        [
+          {
+            "node": "filter only what is needed for final decisions",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get row(s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "filter only what is needed for final decisions": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weather_Fetcher + Image_Processing": {
+      "main": [
+        [
+          {
+            "node": "Merge the results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s)": {
+      "main": [
+        [
+          {
+            "node": "get_history",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_history": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "parse_history": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "parse_history",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "re_evaluation_pump": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "re_evaluation_fan": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "combine_output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "correct_re_evaluation": {
+      "main": [
+        [
+          {
+            "node": "continue_execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "continue_execution": {
+      "main": [
+        [
+          {
+            "node": "split_modes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "semi_auto": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "auto": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge2": {
+      "main": [
+        [
+          {
+            "node": "combine_output1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "final_correction": {
+      "main": [
+        [
+          {
+            "node": "final_decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "re_evaluation_pump",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "re_evaluation_fan",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "semi_auto",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model3": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "auto",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "final_correction",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "combine_output": {
+      "main": [
+        [
+          {
+            "node": "correct_re_evaluation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "If2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "bypass_ai",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If2": {
+      "main": [
+        [
+          {
+            "node": "re_evaluation_pump",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "fall_back_no_pump",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If3": {
+      "main": [
+        [
+          {
+            "node": "re_evaluation_fan",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "fall_back_no_fan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "fall_back_no_pump": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "fall_back_no_fan": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "split_modes": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "auto",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Bypass Auto Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If4": {
+      "main": [
+        [
+          {
+            "node": "semi_auto",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Bypass Semi-Auto Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bypass Semi-Auto Agent": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Bypass Auto Agent": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "combine_output1": {
+      "main": [
+        [
+          {
+            "node": "final_correction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "bypass_ai": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "final_decision": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "2f8e08e3-6861-4658-b9f0-96e07130d244",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "575ddb137b9fe283573f6a90a36bc8dfe6740a9d1bc2af6faeaacdc43dee02a7"
+  },
+  "id": "Vm3f1ojmC1qMG3Ux",
+  "tags": []
+}

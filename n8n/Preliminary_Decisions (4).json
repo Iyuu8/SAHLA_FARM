@@ -1,0 +1,308 @@
+{
+  "name": "Preliminary_Decisions",
+  "nodes": [
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-safeguard-20b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        528,
+        224
+      ],
+      "id": "f679bdb3-59c4-4fed-af8c-e76063b46a2d",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "kVOgTpmK2xHfIr8b",
+          "name": "Groq account 10"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Get the raw output from the AI agent\nlet rawOutput = items[0].json.output;\n\n// Clean up potential markdown formatting just in case the AI leaks code blocks\nrawOutput = rawOutput.replace(/```json/g, '').replace(/```/g, '').trim();\n\n// 2. Parse the AI decisions\nconst decisions = JSON.parse(rawOutput);\n\n// 3. Get the main JSON from the preliminary data node\n// Make sure 'Data_Fetcher' matches the EXACT name of your first JS node\nconst mainJson = $('Data_Fetcher').first().json;\n\n// 4. Map decisions by type for safe lookup (now including logic)\nconst decisionMap = {};\ndecisions.forEach(d => {\n  // Normalize to lowercase to ensure matching works flawlessly\n  decisionMap[d.type.toLowerCase()] = {\n    decision: d.decision.trim().toUpperCase(),\n    logic: d.logic\n  };\n});\n\n// 5. Apply classifications back onto the main json actuators\nconst updatedActuators = mainJson.actuators.map(a => {\n  const aiData = decisionMap[a.type.toLowerCase()];\n\n  if (!aiData) return a; // no decision found, leave untouched\n\n  const decision = aiData.decision;\n  const logic = aiData.logic;\n\n  if (a.control_mode === 'auto') {\n    return {\n      ...a,\n      classification: decision === 'TURN ON' ? 'TURN-ON' : 'KEEP-OFF'\n    };\n  }\n\n  if (a.control_mode === 'semi-auto') {\n    const status   = a.status.toLowerCase();\n    const deciding = decision.toLowerCase(); // Use lower case for the logic block below\n\n    let classification;\n    if      (status === 'off' && deciding === 'turn on')  classification = 'TURN-ON';\n    else if (status === 'on'  && deciding === 'turn off') classification = 'TURN-OFF';\n    else if (status === 'off' && deciding === 'turn off') classification = 'KEEP-OFF';\n    else if (status === 'on'  && deciding === 'turn on')  classification = 'KEEP-ON';\n    else classification = a.classification; // fallback\n\n    const updatedActuator = { ...a, classification };\n\n    // Add recommended_action containing the logic for TURN-OFF actuators only\n    if (classification === 'TURN-OFF') {\n      updatedActuator.recommended_action = logic;\n    }\n\n    return updatedActuator;\n  }\n\n  return a; // fallback for unknown control mode\n});\n\n// 6. Return the updated JSON\nreturn [{ json: { ...mainJson, actuators: updatedActuators } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        0
+      ],
+      "id": "64b4abd8-e2c7-4258-bc18-fd7f0187e625",
+      "name": "Preliminary_Decisions"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=CURRENT TIME:\n{{$json.time}}\n\nFARM INFO:\n- Crop type:    {{$json.crop.type}}\n- Growth stage: {{$json.crop.growth_stage}}\n- Farm mode:    {{$json.crop.mode}}\n\nThese are all the available modes that the system has: balanced, water saving, energy saving, growth priority.\n\nSENSOR READINGS:\n- {{ $json.sensors[0].type }}: {{$json.sensors[0].value}} %\n- {{ $json.sensors[1].type }}:   {{$json.sensors[1].value}} °C\n- {{ $json.sensors[2].type }}:  {{$json.sensors[2].value}} %\n- {{ $json.sensors[3].type }}:    {{$json.sensors[3].value}} lx\n\nACTUATORS ({{$json.actuators.length}} total):\n{{$json.actuators}}\n\nReturn a JSON array of exactly {{$json.actuators.length}} decision(s), one per actuator, in the same order.\nEach object must include the \"type\", \"decision\", and \"logic\" fields. \nOnly output the raw JSON array, nothing else.\n\nIMPORTANT: You received {{$json.actuators.length}} actuator(s): {{$json.actuators.map(a => a.type).join(', ')}}.\nReturn EXACTLY {{$json.actuators.length}} decision(s), only for these types: {{$json.actuators.map(a => a.type).join(', ')}}.\nAny other type in your output is a critical error.\n\nAllowed decision values:\n  - All actuators → \"TURN ON\" or \"TURN OFF\"",
+        "options": {
+          "systemMessage": "You are an expert agricultural AI. Your ONLY job is to decide whether to activate or deactivate each actuator based on the farm data you receive.\n\n─── DECISION GUIDELINES ────────────────────────────────────────────\n\nPUMP (irrigation):\n  - Turn ON if soil_moisture is low relative to the crop and growth stage needs\n  - Turn OFF if soil_moisture is already sufficient or high\n  - Consider temperature and air_humidity: high temperature + low humidity = more water needed\n  - Consider the crop type and growth stage (e.g. flowering stage is critical for water)\n\nFAN (ventilation):\n  - Turn ON if temperature is too high or air_humidity is too high for the crop\n  - Turn ON if luminosity is very high and temperature is already elevated\n  - Turn OFF if temperature and humidity are within acceptable range for the crop and growth stage\n\nAlways factor in:\n  - The farm mode (e.g., growth_priority = prioritize plant health over energy saving)\n  - The crop type and its known agronomic thresholds\n  - The current time (avoid unnecessary irrigation at peak sun hours, etc.)\n  - The combination of all sensor values together, not each in isolation\n\n-----FARM MODES EXPLANATION -----\n\nThe farm mode defines the primary optimization goal of the system, but it does NOT override the fundamental requirement of maintaining plant health and survival.\nAll modes must ensure that environmental conditions remain within acceptable biological ranges for the crop and its current growth stage.\n\nThe modes guide how the system prioritizes resources (water, energy), not whether it should act at all.\n\nMODES:\n\n- growth_priority:\n  The system focuses on maximizing plant growth and development speed.\n  It keeps environmental conditions as close as possible to optimal levels for the crop.\n  It may use more water and energy to quickly correct even small deviations from ideal conditions.\n\n- energy_saving:\n  The system aims to reduce energy consumption while still maintaining acceptable growing conditions.\n  It may tolerate small deviations from optimal temperature or humidity to avoid frequent actuator usage,\n  as long as these deviations do not negatively impact plant health or long-term growth.\n\n- water_saving:\n  The system aims to minimize water usage while still meeting the essential hydration needs of the plant.\n  It may allow soil moisture to drop lower than optimal levels,\n  but must not allow the plant to experience water stress, damage, or risk of drying out.\n\n- balanced:\n  The system seeks a compromise between growth performance, energy efficiency, and water conservation.\n  It maintains conditions within generally acceptable ranges without strongly prioritizing any single factor.\n\nGLOBAL PRINCIPLES (APPLY TO ALL MODES):\n\n- Plant health and survival ALWAYS have the highest priority.\n- The system must prevent dangerous or harmful conditions (e.g., extreme dryness, overheating, or conditions that can damage the plant).\n- Modes influence how aggressively the system reacts, not whether it reacts.\n- As conditions move further away from safe ranges, the system should respond more strongly, regardless of the selected mode.\n- Decisions should be adaptive and proportional rather than strictly binary whenever possible.\n\nThe agent is expected to interpret these modes as flexible guidance and make context-aware decisions based on sensor readings, crop type, and growth stage.\n\n─── OUTPUT RULES ───────────────────────────────────────────────────\n\nReturn ONLY a valid JSON array of decisions, one object per actuator, in the exact same order you received them.\nEach object must have exactly three fields: \"type\", \"decision\", and \"logic\".\nProvide your reasoning strictly within the \"logic\" field. Do not include any conversational text, markdown formatting, or code blocks outside of the raw JSON array.\n\nAllowed decision values for all actuators:\n  - \"TURN ON\"\n  - \"TURN OFF\"\n\nExample output format:\n[\n  {\n    \"type\": \"pump\", \n    \"decision\": \"TURN ON\", \n    \"logic\": \"Soil moisture is critically low for the flowering stage, and the current mode prioritizes growth.\"\n  }, \n  {\n    \"type\": \"fan\", \n    \"decision\": \"TURN OFF\", \n    \"logic\": \"Temperature and humidity are within optimal ranges, aligning with energy saving principles.\",\n\n  }\n]\n\n─── STRICT ACTUATOR CONSTRAINT ───────────────────────────────────────\n\nYou will receive a list of actuators. Count them before doing anything.\nYou must return EXACTLY that number of decisions, for EXACTLY those types you received.\nNever invent actuators that were not in your input.\nBefore outputting, verify: does every type in your output exist in your input? If not, remove it.\n\nIMPORTANT: make the logic field short, one sentence at max, and make the decision cleat in it\ne.g: High humidity detected; keeping the fan off to prevent drawing in more moisture."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        448,
+        0
+      ],
+      "id": "c771e9a8-60c8-4b70-81e2-99365df3d8fc",
+      "name": "Pre_Decider"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = items[0].json;\n\n// ─── Filter actuators first ───────────────────────────────────────────────────\n\n// We now solely rely on the perfectly calculated `skipped` flag from Node 1.\nconst filteredActuators = (input.actuators ?? [])\n  .filter(a => a.skipped === false)\n  .map(a => ({\n    type:           a.type,\n    status:         a.status,\n    control_mode:   a.control_mode,\n    classification: a.classification\n  }));\n\n// ─── Stop if no actuators passed the filter ───────────────────────────────────\n\nif (filteredActuators.length === 0) {\n  // Return a debug payload so you can see why it's empty!\n  return [{ \n    json: { \n      debug_warning: \"ALL ACTUATORS WERE FILTERED OUT!\",\n      raw_input_actuators_were: input.actuators \n    } \n  }];\n}\n\n// ─── Filter & reshape ─────────────────────────────────────────────────────────\n\nconst output = {\n  time: input.meta?.triggered_at ?? null,\n  crop: input.crop ?? null, // ✅ FIXED: Replaced 'farm' with 'crop'\n  sensors: (input.sensors ?? []).map(s => ({\n    type:  s.type,          // ✅ FIXED: Uses 'type' instead of 'name'\n    value: s.value\n  })),\n  actuators: filteredActuators\n};\n\nreturn [{ json: output }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "f5611a06-4600-4449-91f8-a2d76f6d3fff",
+      "name": "Filter actuators + important data only"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "f2d5a1b4-c66d-4121-b77c-7ee5dbda9e71",
+      "name": "Data_Fetcher"
+    }
+  ],
+  "pinData": {
+    "Data_Fetcher": [
+      {
+        "json": {
+          "meta": {
+            "run_id": "d471b9-147929a63ab1",
+            "triggered_at": "2026-04-29T09:29:04+01:00",
+            "adr": "172.19.32.237"
+          },
+          "location": {
+            "latitude": 36.716781245509864,
+            "longitude": 3.1546447886010713,
+            "timezone": "Africa/Algiers"
+          },
+          "crop": {
+            "type": "Carrot",
+            "growth_stage": "Seedling",
+            "mode": "Balanced"
+          },
+          "sensors": [
+            {
+              "type": "soil_moisture",
+              "value": 12,
+              "description": null
+            },
+            {
+              "type": "temperature",
+              "value": 25,
+              "description": null
+            },
+            {
+              "type": "air_humidity",
+              "value": 30,
+              "description": null
+            },
+            {
+              "type": "luminosity",
+              "value": 85000,
+              "description": null
+            }
+          ],
+          "actuators": [
+            {
+              "type": "pump",
+              "status": "off",
+              "control_mode": "semi-auto",
+              "classification": "NOW-RE-EVALUATING",
+              "skipped": false,
+              "run": {
+                "active": false,
+                "execute_at": null,
+                "duration_minutes": null,
+                "execute_until": null
+              },
+              "re_evaluation": {
+                "active": true,
+                "skipped": false,
+                "interval": {
+                  "start": "2026-04-29T09:00:00+01:00",
+                  "end": "2026-04-29T10:00:00+01:00"
+                }
+              }
+            },
+            {
+              "type": "fan",
+              "status": "on",
+              "control_mode": "semi-auto",
+              "classification": "FREE",
+              "skipped": false,
+              "run": {
+                "active": false,
+                "execute_at": null,
+                "duration_minutes": null,
+                "execute_until": null
+              },
+              "re_evaluation": {
+                "active": false,
+                "skipped": false,
+                "interval": {
+                  "start": null,
+                  "end": null
+                }
+              }
+            }
+          ],
+          "notifications": null,
+          "warnings": [
+            {
+              "name": "frost_risk",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "heavy_rainfall",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "high_humidity_level",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "high_temperature_detected",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "insufficient_sunlight",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "excessive_sunlight",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "low_soil_moisture",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "overwatering",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "strong_wind",
+              "active": true,
+              "severity": null,
+              "description": null
+            }
+          ],
+          "recommendation": null,
+          "weather": {
+            "precipitation_probability": null,
+            "state": null,
+            "summary": null
+          },
+          "history": {
+            "runs": null
+          },
+          "image_processing": {
+            "summary": null,
+            "features": {
+              "rain_detected": null,
+              "water_on_leaves": null,
+              "cloud_cover": null,
+              "lighting_level": null,
+              "shadows_present": null,
+              "plant_motion_detected": null,
+              "motion_intensity": null
+            },
+            "confidence_rain": null,
+            "confidence_wind": null
+          }
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Pre_Decider",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pre_Decider": {
+      "main": [
+        [
+          {
+            "node": "Preliminary_Decisions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter actuators + important data only": {
+      "main": [
+        [
+          {
+            "node": "Pre_Decider",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Data_Fetcher": {
+      "main": [
+        [
+          {
+            "node": "Filter actuators + important data only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "f3164afb-567c-4587-8bb5-ba0f7c60ee39",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "575ddb137b9fe283573f6a90a36bc8dfe6740a9d1bc2af6faeaacdc43dee02a7"
+  },
+  "id": "RpgKXV9QQzfmlYvB",
+  "tags": []
+}

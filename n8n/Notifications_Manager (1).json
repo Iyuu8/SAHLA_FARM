@@ -1,0 +1,413 @@
+{
+  "name": "Notifications_Manager",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "642aed25-ba27-40ee-8ef8-c2c8367623d4",
+      "name": "Warnings_Updater"
+    },
+    {
+      "parameters": {
+        "jsCode": "const main = items[0].json;\n\nconst output = {\n  time: main.meta.triggered_at,\n  crop: main.crop ?? null,\n\n  // only relevant actuator fields for notifications\n  actuators: (main.actuators ?? []).map(a => ({\n    type:            a.type,\n    control_mode:    a.control_mode,\n    classification:  a.classification,\n    run: {\n      execute_at:       a.run?.execute_at       ?? null,\n      execute_until:    a.run?.execute_until     ?? null,\n      duration_minutes: a.run?.duration_minutes  ?? null\n    },\n    recommended_action: a.recommended_action ?? null\n  })),\n\n  // only active warnings\n  warnings: (main.warnings ?? [])\n    .filter(w => w.active === true)\n    .map(w => ({\n      name:        w.name,\n      severity:    w.severity,\n      description: w.description\n    })),\n\n  // weather summary only, no insights\n  weather: {\n    state:                     main.weather.state,\n    precipitation_probability: main.weather.precipitation_probability,\n    summary:                   main.weather.summary\n  }\n};\n\nreturn [{ json: output }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "dfb436f2-afb6-4a6d-8119-53bbf7c9d8d2",
+      "name": "filter only what is needed"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-safeguard-20b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        448,
+        208
+      ],
+      "id": "3644b96c-ef92-456f-87ad-e3e08d3b6dc8",
+      "name": "Groq Chat Model5",
+      "credentials": {
+        "groqApi": {
+          "id": "SwCahf9ylShS4Gwa",
+          "name": "Groq account 7"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=CURRENT TIME:\n{{$json.time}}\n\nCROP INFO:\n- Type:         {{$json.crop.type}}\n- Growth stage: {{$json.crop.growth_stage}}\n- Farm mode:    {{$json.crop.mode}}\n\nACTUATORS:\n{{JSON.stringify($json.actuators, null, 2)}}\n\nWEATHER:\n- State:                     {{$json.weather.state}}\n- Precipitation probability: {{$json.weather.precipitation_probability}}%\n- Summary:                   {{$json.weather.summary}}\n\nBased on the above, generate a maximum of 6 prioritized push notifications for the farmer.\nReturn ONLY a valid JSON array of maximum 6 objects, each with \"title\" and \"description\".\nNo technical field names, no markdown, no explanation.",
+        "options": {
+          "systemMessage": "You are an expert agricultural notification system. You receive real-time farm data and your job is to generate a concise, prioritized list of push notifications for the farmer, based on actuator actions and the weather forecast.\n\n─── YOUR JOB ────────────────────────────────────────────────────────────────────\n\nGenerate a maximum of 6 notifications total, prioritized by urgency. Each notification has exactly two fields: \"title\" and \"description\".\n\n─── NOTIFICATION SOURCES ────────────────────────────────────────────────────────\n\nYou have two sources to generate notifications from:\n\n1. ACTUATORS:\n   - For each actuator with classification TURN-ON  → notify the farmer that it will run (mention time and duration if available)\n   - For each actuator with classification TURN-OFF → notify the farmer that it will be turned off\n   - For each actuator with classification KEEP-ON  → notify that it is staying on (only if noteworthy)\n   - For each actuator with classification NEED-RE-EVALUATION or FUTURE-RE-EVALUATING → notify that a re-check is scheduled\n   - For semi-auto actuators, use the recommended_action field to enrich the notification\n   - Skip actuators with KEEP-OFF, FREE, WORKING, PENDING classifications (not worth notifying)\n\n2. WEATHER (TIME-RESTRICTED):\n   - ONLY generate a weather forecast notification if the CURRENT TIME provided in the prompt is strictly between 06:00 and 06:30 AM (local time). \n   - If the current time is outside of this 30-minute window, completely SKIP the weather notification. Do NOT generate it.\n   - When valid, summarize the upcoming conditions briefly and mention rain risk if precipitation probability is > 30%.\n\n─── PRIORITIZATION RULES ────────────────────────────────────────────────────────\n\nOrder notifications by priority:\n1. Actuator actions (TURN-ON, TURN-OFF) first\n2. Weather forecast (if applicable based on time) second\n3. Actuator re-evaluation notices (NEED-RE-EVALUATION, FUTURE-RE-EVALUATING) third\n\nIf total notifications exceed 6, drop the lowest priority ones.\n\n─── TITLE AND DESCRIPTION RULES ─────────────────────────────────────────────────\n\n- Title: short, max 40 characters, can include a relevant emoji\n- Description: plain farmer-friendly language, max 100 characters.\n- ANTI-HALLUCINATION RULE: Rely STRICTLY on the provided data and descriptions. Do NOT invent, guess, or add unprompted agricultural advice (e.g., do not tell the farmer to \"water now\"). Just clearly state the current farm conditions or scheduled actions.\n- Never use technical field names like \"TURN-ON\" in the output\n- Always mention the crop type or actuator name in plain language (e.g. \"pump\", \"fan\", \"orange trees\")\n\n─── OUTPUT FORMAT ───────────────────────────────────────────────────────────────\n\nReturn ONLY a valid JSON array of notification objects, maximum 6 items.\nEach object must have exactly two fields: \"title\" and \"description\".\nNo explanation, no commentary, no markdown, no code blocks.\n\nExample:\n[\n  {\"title\": \"Irrigation Scheduled\", \"description\": \"Pump will run for 20 minutes starting at 06:00. Delaying due to recent rain.\"},\n  {\"title\": \"Morning Weather Update\", \"description\": \"Cloudy today with a 40% chance of rain. No extreme temperatures expected.\"}\n]"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        448,
+        0
+      ],
+      "id": "a6058d2d-36be-48d0-8ab2-7e1df4c94da0",
+      "name": "Notifications_Maker"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw      = JSON.parse($input.first().json.output);\nconst mainJson = { ...$('Warnings_Updater').first().json };\n\n// ─── Merge notifications ──────────────────────────────────────────────────────\n\nmainJson.notifications = raw;\n\nreturn [{ json: mainJson }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        0
+      ],
+      "id": "ebe66960-7c21-4234-a9bb-0a0d7e85f6cf",
+      "name": "full main json payload"
+    }
+  ],
+  "pinData": {
+    "Warnings_Updater": [
+      {
+        "json": {
+          "meta": {
+            "run_id": "e2f046-5904c26089eb",
+            "triggered_at": "2026-03-27T13:46:11"
+          },
+          "location": {
+            "latitude": 36.71743830106968,
+            "longitude": 3.1542778015136723,
+            "timezone": "Africa/Algiers"
+          },
+          "crop": {
+            "type": "orange",
+            "growth_stage": "flowering",
+            "mode": "growth_priority"
+          },
+          "sensors": [
+            {
+              "type": "soil_moisture",
+              "value": 0,
+              "description": "Your soil is critically dry, irrigate immediately to avoid flower loss."
+            },
+            {
+              "type": "temperature",
+              "value": 20.2,
+              "description": "Temperature is comfortable, supporting healthy flowering."
+            },
+            {
+              "type": "air_humidity",
+              "value": 67.5,
+              "description": "Humidity is well balanced, reducing dehydration risk."
+            },
+            {
+              "type": "luminosity",
+              "value": 42,
+              "description": "Light levels are slightly low, consider supplemental lighting."
+            }
+          ],
+          "actuators": [
+            {
+              "type": "pump",
+              "status": "off",
+              "control_mode": "auto",
+              "classification": "NEED-RE-EVALUATION",
+              "skipped": false,
+              "run": {
+                "execute_at": null,
+                "duration_minutes": null,
+                "execute_until": null
+              },
+              "re_evaluation": {
+                "active": true,
+                "skipped": false,
+                "interval": {
+                  "start": "2026-03-27T18:00:00",
+                  "end": "2026-03-28T06:00:00"
+                }
+              }
+            },
+            {
+              "type": "fan",
+              "status": "off",
+              "control_mode": "semi-auto",
+              "classification": "KEEP-OFF",
+              "skipped": false,
+              "recommended_action": "Keep the fan off, no action is needed at this time.",
+              "run": {
+                "active": false,
+                "execute_at": null,
+                "duration_minutes": null,
+                "execute_until": null
+              },
+              "re_evaluation": {
+                "active": false,
+                "skipped": false,
+                "interval": {
+                  "start": null,
+                  "end": null
+                }
+              }
+            }
+          ],
+          "notifications": null,
+          "warnings": [
+            {
+              "name": "frost_risk",
+              "active": false,
+              "severity": 0,
+              "description": "No frost risk detected, your orange trees are safe."
+            },
+            {
+              "name": "heavy_rainfall",
+              "active": true,
+              "severity": 45,
+              "description": "Rain detected, risk of waterlogging for flowering oranges."
+            },
+            {
+              "name": "high_humidity_level",
+              "active": false,
+              "severity": 0,
+              "description": "Humidity normal for orange flowers, no concern."
+            },
+            {
+              "name": "high_temperature_detected",
+              "active": false,
+              "severity": 0,
+              "description": "Temperature fine, no heat stress for orange trees."
+            },
+            {
+              "name": "insufficient_sunlight",
+              "active": true,
+              "severity": 50,
+              "description": "Low light may slow flowering in orange trees."
+            },
+            {
+              "name": "excessive_sunlight",
+              "active": false,
+              "severity": 0,
+              "description": "Sunlight levels are within safe range for oranges."
+            },
+            {
+              "name": "low_soil_moisture",
+              "active": true,
+              "severity": 70,
+              "description": "Dry soil threatens orange flower development."
+            },
+            {
+              "name": "overwatering",
+              "active": true,
+              "severity": 60,
+              "description": "Leaves wet may cause fungal issues on orange flowers."
+            },
+            {
+              "name": "strong_wind",
+              "active": true,
+              "severity": 35,
+              "description": "Wind may damage delicate orange flowers."
+            }
+          ],
+          "recommendation": "Heavy rain has soaked the soil and leaves, so we’re holding off on irrigation for now and will re-check later when the ground dries.",
+          "weather": {
+            "precipitation_probability": 18,
+            "state": "cloudy",
+            "summary": "Over the next 48 hours, Algiers will experience a mix of cloudy and sunny intervals with a slight chance of rain in the early hours. Temperature will gradually increase reaching a peak during midday. No significant weather disturbances are expected.",
+            "insights": {
+              "highlights": {
+                "max_temperature": {
+                  "value": 17.5,
+                  "time": "2026-03-27T14:00"
+                },
+                "min_temperature": {
+                  "value": 6.8,
+                  "time": "2026-03-28T06:00"
+                }
+              },
+              "hourly": [
+                {
+                  "time": "2026-03-27T00:00",
+                  "temperature": 9.8,
+                  "humidity": 79,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-03-27T03:00",
+                  "temperature": 8.5,
+                  "humidity": 81,
+                  "precipitation_probability": 5
+                },
+                {
+                  "time": "2026-03-27T06:00",
+                  "temperature": 9.1,
+                  "humidity": 72,
+                  "precipitation_probability": 3
+                },
+                {
+                  "time": "2026-03-27T09:00",
+                  "temperature": 12.2,
+                  "humidity": 63,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-03-27T12:00",
+                  "temperature": 16.3,
+                  "humidity": 44,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-03-27T15:00",
+                  "temperature": 17,
+                  "humidity": 41,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-03-27T18:00",
+                  "temperature": 13.5,
+                  "humidity": 67,
+                  "precipitation_probability": 8
+                },
+                {
+                  "time": "2026-03-27T21:00",
+                  "temperature": 11.4,
+                  "humidity": 82,
+                  "precipitation_probability": 10
+                },
+                {
+                  "time": "2026-03-28T00:00",
+                  "temperature": 10.8,
+                  "humidity": 75,
+                  "precipitation_probability": 3
+                },
+                {
+                  "time": "2026-03-28T03:00",
+                  "temperature": 8.5,
+                  "humidity": 84,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-03-28T06:00",
+                  "temperature": 6.8,
+                  "humidity": 89,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-03-28T09:00",
+                  "temperature": 11,
+                  "humidity": 69,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-03-28T12:00",
+                  "temperature": 15.4,
+                  "humidity": 47,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-03-28T15:00",
+                  "temperature": 15.8,
+                  "humidity": 44,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-03-28T18:00",
+                  "temperature": 14.3,
+                  "humidity": 52,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-03-28T21:00",
+                  "temperature": 10.7,
+                  "humidity": 71,
+                  "precipitation_probability": 0
+                }
+              ]
+            }
+          },
+          "image_processing": {
+            "summary": "Heavy rainfall has left the soil and leaves visibly wet; cloud coverage is high, blocking the sun; shadows are present despite low lighting; plants show moderate motion due to wind.",
+            "features": {
+              "rain_detected": true,
+              "water_on_leaves": true,
+              "cloud_cover": "high",
+              "lighting_level": "low",
+              "shadows_present": true,
+              "plant_motion_detected": true,
+              "motion_intensity": "moderate"
+            },
+            "confidence": 93
+          }
+        }
+      }
+    ]
+  },
+  "connections": {
+    "filter only what is needed": {
+      "main": [
+        [
+          {
+            "node": "Notifications_Maker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model5": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Notifications_Maker",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notifications_Maker": {
+      "main": [
+        [
+          {
+            "node": "full main json payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Warnings_Updater": {
+      "main": [
+        [
+          {
+            "node": "filter only what is needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "0216dc53-9805-4157-a23c-e51a1e0ba844",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "575ddb137b9fe283573f6a90a36bc8dfe6740a9d1bc2af6faeaacdc43dee02a7"
+  },
+  "id": "RKPmm6oY3A34L0I3",
+  "tags": []
+}

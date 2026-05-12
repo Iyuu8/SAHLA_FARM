@@ -1,0 +1,617 @@
+{
+  "name": "Full_Workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -1120,
+        192
+      ],
+      "id": "29c11769-4659-4709-abfd-e2b98507015e",
+      "name": "Decisions + Image results"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "nGBiqDTfgkFEzbkZ",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/nGBiqDTfgkFEzbkZ",
+          "cachedResultName": "Data_Fetcher"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -2240,
+        192
+      ],
+      "id": "9dd59801-a917-49c1-9344-5d5e37b13b44",
+      "name": "Data_Fetcher"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "RpgKXV9QQzfmlYvB",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/RpgKXV9QQzfmlYvB",
+          "cachedResultName": "Preliminary_Decisions"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -2016,
+        192
+      ],
+      "id": "e27b0f69-3c72-44be-bc58-30c6ecf5d4ed",
+      "name": "Preliminary_Decisions"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "ujinj9mgtHiNxaTQ",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/ujinj9mgtHiNxaTQ",
+          "cachedResultName": "Weather_Fetcher"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -1568,
+        192
+      ],
+      "id": "938c3f89-12b0-4e76-ac09-e958b89a74ab",
+      "name": "Weather_Fetcher"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "Vm3f1ojmC1qMG3Ux",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/Vm3f1ojmC1qMG3Ux",
+          "cachedResultName": "Final_Decisions"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -896,
+        192
+      ],
+      "id": "7266104b-b6d9-4f50-af24-56b79df04481",
+      "name": "Final_Decisions"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "Cy7k0ypr2l99j4OH",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/Cy7k0ypr2l99j4OH",
+          "cachedResultName": "Sensors_Updater"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -672,
+        192
+      ],
+      "id": "1d0003d1-faad-494d-8292-f6acb699e11e",
+      "name": "Sensors_Updater"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "fxE9DgX4BoZiFLgr",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/fxE9DgX4BoZiFLgr",
+          "cachedResultName": "Warnings_Updater"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -448,
+        192
+      ],
+      "id": "3824c9cf-cfa1-437d-8259-6fe37e56cbbd",
+      "name": "Warnings_Updater"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "RKPmm6oY3A34L0I3",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/RKPmm6oY3A34L0I3",
+          "cachedResultName": "Notifications_Manager"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -240,
+        192
+      ],
+      "id": "eda1ee5a-aca3-4fb3-8adc-9b49489ab3a5",
+      "name": "Notifications_Manager"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "x4WNn4Gb8p2uuIic",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/x4WNn4Gb8p2uuIic",
+          "cachedResultName": "Data_Sender"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        192
+      ],
+      "id": "234f4cf0-da3b-413f-92fd-77bf174f1065",
+      "name": "Data_Sender"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -2464,
+        192
+      ],
+      "id": "e31f91ef-26ce-4abd-b80e-57018e98fc34",
+      "name": "Timer Trigger"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "kKj4oQPNazNl0PnG",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/kKj4oQPNazNl0PnG",
+          "cachedResultName": "Image_Processing"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -1344,
+        304
+      ],
+      "id": "5b17eac6-735a-4049-a887-34219642dd0c",
+      "name": "Call 'Image_Processing'"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "GgwtfPIH40dW4tp6",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/GgwtfPIH40dW4tp6",
+          "cachedResultName": "clear_re_evaluation"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -2016,
+        48
+      ],
+      "id": "827e78da-9d61-46ec-a528-ce883945b7e6",
+      "name": "Call 'clear_re_evaluation'"
+    }
+  ],
+  "pinData": {
+    "Data_Fetcher": [
+      {
+        "json": {
+          "meta": {
+            "run_id": "d471b9-147929a63ab1",
+            "triggered_at": "2026-04-01T10:00:00+01:00",
+            "adr": "host.docker.internal"
+          },
+          "location": {
+            "latitude": 36.716781245509864,
+            "longitude": 3.1546447886010713,
+            "timezone": "Africa/Algiers"
+          },
+          "crop": {
+            "type": "Carrot",
+            "growth_stage": "Seedling",
+            "mode": "Balanced"
+          },
+          "sensors": [
+            {
+              "type": "soil_moisture",
+              "value": 12,
+              "description": null
+            },
+            {
+              "type": "temperature",
+              "value": 36.5,
+              "description": null
+            },
+            {
+              "type": "air_humidity",
+              "value": 30,
+              "description": null
+            },
+            {
+              "type": "luminosity",
+              "value": 85000,
+              "description": null
+            }
+          ],
+          "actuators": [
+            {
+              "type": "pump",
+              "status": "on",
+              "control_mode": "semi-auto",
+              "classification": "FREE",
+              "skipped": false,
+              "run": {
+                "active": false,
+                "execute_at": null,
+                "duration_minutes": null,
+                "execute_until": null
+              },
+              "re_evaluation": {
+                "active": false,
+                "skipped": false,
+                "interval": {
+                  "start": null,
+                  "end": null
+                }
+              }
+            },
+            {
+              "type": "fan",
+              "status": "off",
+              "control_mode": "semi-auto",
+              "classification": "FREE",
+              "skipped": false,
+              "run": {
+                "active": false,
+                "execute_at": null,
+                "duration_minutes": null,
+                "execute_until": null
+              },
+              "re_evaluation": {
+                "active": false,
+                "skipped": false,
+                "interval": {
+                  "start": null,
+                  "end": null
+                }
+              }
+            }
+          ],
+          "notifications": null,
+          "warnings": [
+            {
+              "name": "frost_risk",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "heavy_rainfall",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "high_humidity_level",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "high_temperature_detected",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "insufficient_sunlight",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "excessive_sunlight",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "low_soil_moisture",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "overwatering",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "strong_wind",
+              "active": true,
+              "severity": null,
+              "description": null
+            }
+          ],
+          "recommendation": null,
+          "weather": {
+            "precipitation_probability": null,
+            "state": null,
+            "summary": null
+          },
+          "history": {
+            "runs": null
+          },
+          "image_processing": {
+            "summary": null,
+            "features": {
+              "rain_detected": null,
+              "water_on_leaves": null,
+              "cloud_cover": null,
+              "lighting_level": null,
+              "shadows_present": null,
+              "plant_motion_detected": null,
+              "motion_intensity": null
+            },
+            "confidence_rain": null,
+            "confidence_wind": null
+          }
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Decisions + Image results": {
+      "main": [
+        [
+          {
+            "node": "Final_Decisions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Data_Fetcher": {
+      "main": [
+        [
+          {
+            "node": "Call 'clear_re_evaluation'",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Preliminary_Decisions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preliminary_Decisions": {
+      "main": [
+        [
+          {
+            "node": "Weather_Fetcher",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weather_Fetcher": {
+      "main": [
+        [
+          {
+            "node": "Decisions + Image results",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Call 'Image_Processing'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final_Decisions": {
+      "main": [
+        [
+          {
+            "node": "Sensors_Updater",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sensors_Updater": {
+      "main": [
+        [
+          {
+            "node": "Warnings_Updater",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Warnings_Updater": {
+      "main": [
+        [
+          {
+            "node": "Notifications_Manager",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notifications_Manager": {
+      "main": [
+        [
+          {
+            "node": "Data_Sender",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Timer Trigger": {
+      "main": [
+        [
+          {
+            "node": "Data_Fetcher",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Image_Processing'": {
+      "main": [
+        [
+          {
+            "node": "Decisions + Image results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "6787528c-a0a4-4179-bd0b-d9656275b227",
+  "meta": {
+    "instanceId": "575ddb137b9fe283573f6a90a36bc8dfe6740a9d1bc2af6faeaacdc43dee02a7"
+  },
+  "id": "L1gb69OyjNyISXtf",
+  "tags": []
+}

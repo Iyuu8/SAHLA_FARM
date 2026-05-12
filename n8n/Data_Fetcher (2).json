@@ -1,0 +1,114 @@
+{
+  "name": "Data_Fetcher",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -128,
+        0
+      ],
+      "id": "3e2c7d13-ab31-4381-a82c-44f5adf2a0f0",
+      "name": "Timer Trigger"
+    },
+    {
+      "parameters": {
+        "url": "=http://{{ $json.piAdr }}:8123/api/states",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "{\n        \"Authorization\": \"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJlMzg5YTNiYzg0OWE0ODRiYmI2Y2M0ZjhjNDE4ZmM5YSIsImlhdCI6MTc3NDkxMTA1MywiZXhwIjoyMDkwMjcxMDUzfQ.ntEjr2TFoCOHg-yOv6bBqikvTayGDVbqwtZ6zkCAu8Q\",\n        \"Content-Type\": \"application/json\"\n      }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        224,
+        0
+      ],
+      "id": "212fcbc3-2c34-4b65-ae95-c301cfbc1b9d",
+      "name": "Fetch entites from HA"
+    },
+    {
+      "parameters": {
+        "jsCode": "const entities = items.map(i => i.json);\nconst byId = (id) => entities.find(e => e.entity_id === id);\n\nconst now = new Date();\nconst zone = byId('zone.home');\n// Dynamically fallback to Africa/Algiers if the zone entity doesn't provide it\nconst targetTz = zone?.attributes?.time_zone ?? 'Africa/Algiers';\n\n// ─── Helpers ─────────────────────────────────────────────────────────────────\n\nfunction randomRunId() {\n  const hex = () => Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0');\n  return `${hex()}-${Math.floor(Math.random() * 0xffffffffffff).toString(16).padStart(12, '0')}`;\n}\n\n// ✅ NEW: Dynamically calculates the offset string (e.g., \"+01:00\") based on zone.home\nfunction getDynamicOffsetStr(date) {\n  const utc = new Date(date.toLocaleString('en-US', { timeZone: 'UTC' }));\n  const loc = new Date(date.toLocaleString('en-US', { timeZone: targetTz }));\n  const diffMinutes = Math.round((loc - utc) / 60000);\n  const sign = diffMinutes >= 0 ? '+' : '-';\n  const pad = (num) => String(Math.floor(Math.abs(num))).padStart(2, '0');\n  return `${sign}${pad(diffMinutes / 60)}:${pad(diffMinutes % 60)}`;\n}\n\nfunction toISO(datetimeStr) {\n  if (!datetimeStr || datetimeStr === 'unknown') return null;\n  // If it's just a date without a time, parse it directly\n  if (!datetimeStr.includes(' ')) return new Date(datetimeStr);\n  \n  // Appends the dynamic offset calculated from zone.home\n  return new Date(datetimeStr.replace(' ', 'T') + getDynamicOffsetStr(now));\n}\n\nfunction formatTime(date) {\n  if (!date) return null;\n  // Calculate exact millisecond difference for the target timezone\n  const utc = new Date(date.toLocaleString('en-US', { timeZone: 'UTC' }));\n  const loc = new Date(date.toLocaleString('en-US', { timeZone: targetTz }));\n  const diffMinutes = Math.round((loc - utc) / 60000);\n  \n  // Apply difference to generate the correct visual ISO string with offset\n  const localTime = new Date(date.getTime() + (diffMinutes * 60000));\n  return localTime.toISOString().slice(0, 19) + getDynamicOffsetStr(date);\n}\n\nfunction diffMinutes(from, to) {\n  if (!from || !to) return null;\n  return Math.round((to - from) / 60000);\n}\n\nfunction safeParse(value) {\n  if (value === null || value === undefined) return null;\n  if (value === 'unknown' || value === 'unavailable') return null;\n\n  const num = parseFloat(value);\n  return isNaN(num) ? null : num;\n}\n\n// ─── Entity lookups ───────────────────────────────────────────────────────────\n\nconst cropType     = byId('input_select.crop_type');\nconst growthStage  = byId('input_select.growth_stage');\nconst priorityMode = byId('input_select.priority_mode');\n\nconst soilMoisture = byId('sensor.farm_soil_moisture');\nconst temperature  = byId('sensor.farm_temperature');\nconst airHumidity  = byId('sensor.farm_humidity');\nconst luminosity   = byId('sensor.farm_ambient_light');\n\n// ─── Actuator builder ─────────────────────────────────────────────────────────\n\nfunction buildActuator(type) {\n  const controlModeRaw = byId(`input_boolean.${type}_control_mode`)?.state ?? null;\n  const status         = type===\"pump\" ?   byId(`switch.${type}_status`)?.state: byId(`input_boolean.${type}_status`)?.state\n    ;\n\n  const executeAtDate    = toISO(byId(`input_datetime.${type}_execute_at`)?.state);\n  const executeUntilDate = toISO(byId(`input_datetime.${type}_execute_until`)?.state);\n  const reEvalStartDate  = toISO(byId(`input_datetime.${type}_re_evaluation_start`)?.state);\n  const reEvalEndDate    = toISO(byId(`input_datetime.${type}_re_evaluation_end`)?.state);\n\n  const executeAtStr    = formatTime(executeAtDate);\n  const executeUntilStr = formatTime(executeUntilDate);\n\n  const isValidReEval  = reEvalStartDate && reEvalEndDate && (reEvalStartDate < reEvalEndDate);\n  const reEvalExpired  = !isValidReEval || now > reEvalEndDate;\n  const isFutureOrActiveReEval = isValidReEval && now <= reEvalEndDate;\n\n  const reEvalStartStr = reEvalExpired ? null : formatTime(reEvalStartDate);\n  const reEvalEndStr   = reEvalExpired ? null : formatTime(reEvalEndDate);\n\n  let controlMode;\n  if (controlModeRaw !== \"on\")      controlMode = 'auto';\n  else if (controlModeRaw === \"on\") controlMode = 'semi-auto';\n  else                              controlMode = null;\n\n  if (isFutureOrActiveReEval) {\n    // Check if the current time has actually reached the start of the re-evaluation range\n    const isCurrentlyActive = now >= reEvalStartDate;\n    const shouldSkip = !isCurrentlyActive; // Skip is true if it's in the future, false if active\n\n    return {\n      type,\n      status,\n      control_mode: controlMode,\n      // ✅ Dynamic classification based on whether we are currently in the range or waiting for it\n      classification: isCurrentlyActive ? 'NOW-RE-EVALUATING' : 'FUTURE-RE-EVALUATING',\n      skipped: shouldSkip,\n      ...(controlModeRaw === \"on\" ? { recommended_action: null } : {}),\n      run: { active: false, execute_at: null, duration_minutes: null, execute_until: null },\n      re_evaluation: {\n        active: true,\n        skipped: shouldSkip,\n        interval: { start: reEvalStartStr, end: reEvalEndStr }\n      }\n    };\n  }\n\n  if (controlModeRaw !== \"on\") {\n    const executeUntilExpired = !executeUntilDate || now > executeUntilDate;\n\n    // The base validation logic preserved\n    const isValidRun = executeAtDate && executeUntilDate && (executeAtDate < executeUntilDate);\n\n    if (!isValidRun) {\n      if (executeUntilExpired) {\n        return {\n          type, status, control_mode: controlMode,\n          classification: 'FREE', skipped: false,\n          run: { active: false, execute_at: null, duration_minutes: null, execute_until: null },\n          re_evaluation: { active: false, skipped: false, interval: { start: null, end: null } }\n        };\n      } else {\n        const fallbackClass = status === 'on' ? 'WORKING' : 'FREE';\n        return {\n          type, status, control_mode: controlMode,\n          classification: fallbackClass, \n          skipped: fallbackClass === 'WORKING',\n          run: { active: false, execute_at: null, duration_minutes: null, execute_until: null },\n          re_evaluation: { active: false, skipped: false, interval: { start: null, end: null } }\n        };\n      }\n    }\n\n    if (executeUntilExpired) {\n      return {\n        type, status, control_mode: controlMode,\n        classification: 'FREE', skipped: false,\n        run: { active: false, execute_at: null, duration_minutes: null, execute_until: null },\n        re_evaluation: { active: false, skipped: false, interval: { start: null, end: null } }\n      };\n    }\n\n    const duration = diffMinutes(executeAtDate, executeUntilDate);\n\n    if (now < executeAtDate) {\n      return {\n        type, status, control_mode: controlMode,\n        classification: 'PENDING', skipped: true,\n        run: {\n          active: true, execute_at: executeAtStr, duration_minutes: duration, execute_until: executeUntilStr\n        },\n        re_evaluation: { active: false, skipped: false, interval: { start: reEvalStartStr, end: reEvalEndStr } }\n      };\n    } else {\n      return {\n        type, status, control_mode: controlMode,\n        classification: 'WORKING', skipped: true,\n        run: {\n          active: true, execute_at: executeAtStr, duration_minutes: duration, execute_until: executeUntilStr\n        },\n        re_evaluation: { active: false, skipped: false, interval: { start: reEvalStartStr, end: reEvalEndStr } }\n      };\n    }\n  }\n\n  // Semi-Auto mode\n  if (controlModeRaw === \"on\") {\n    return {\n      type, status, control_mode: controlMode,\n      classification: status === 'on' ? 'ON' : 'OFF',\n      skipped: false, recommended_action: null,\n      run: { active: false, execute_at: null, duration_minutes: null, execute_until: null },\n      re_evaluation: { active: false, skipped: false, interval: { start: null, end: null } }\n    };\n  }\n\n  return {\n    type, status, control_mode: controlMode,\n    classification: null, skipped: false,\n    run: { active: false, execute_at: null, duration_minutes: null, execute_until: null },\n    re_evaluation: { active: false, skipped: false, interval: { start: null, end: null } }\n  };\n}\n\n// ─── Warnings ─────────────────────────────────────────────────────────────────\n\nconst warningKeys = [\n  'frost_risk', 'heavy_rainfall', 'high_humidity_level',\n  'high_temperature_detected', 'insufficient_sunlight',\n  'excessive_sunlight', 'low_soil_moisture', 'overwatering', 'strong_wind'\n];\n\nconst warnings = warningKeys.map(key => ({\n  name: key,\n  active: byId(`input_boolean.${key}`)?.state === 'on',\n  severity: null,\n  description: null\n}));\n\n// ─── Build actuators ──────────────────────────────────────────────────────────\n\nconst pumpActuator = buildActuator('pump');\nconst fanActuator  = buildActuator('fan');\n\n// ─── Assemble output ──────────────────────────────────────────────────────────\n\nconst output = {\n  meta: {\n    run_id: randomRunId(),\n    // Now explicitly uses formatTime() so it mathematically matches all other time fields perfectly!\n    triggered_at: formatTime(now), \n    adr: $('Code in JavaScript').first().json.piAdr\n  },\n  location: {\n    latitude:  zone?.attributes?.latitude  ?? null,\n    longitude: zone?.attributes?.longitude ?? null,\n    // Safely reads the timezone directly from the zone object if it exists\n    timezone:  targetTz \n  },\n  crop: {\n    type:         cropType?.state     ?? null,\n    growth_stage: growthStage?.state  ?? null,\n    mode:         priorityMode?.state ?? null\n  },\n  sensors: [\n    { type: 'soil_moisture', value: safeParse(soilMoisture?.state), description: null },\n    { type: 'temperature',   value: safeParse(temperature?.state),  description: null },\n    { type: 'air_humidity',  value: safeParse(airHumidity?.state),  description: null },\n    { type: 'luminosity',    value: safeParse(luminosity?.state),   description: null }\n  ],\n  actuators: [pumpActuator, fanActuator],\n  notifications: null,\n  warnings,\n  recommendation: null,\n  weather: { precipitation_probability: null, state: null, summary: null },\n  history: { runs: null},\n  image_processing: {\n    summary: null,\n    features: {\n      rain_detected: null, water_on_leaves: null, cloud_cover: null,\n      lighting_level: null, shadows_present: null, plant_motion_detected: null, motion_intensity: null\n    },\n    confidence_rain: null,\n    confidence_wind:null\n  },\n};\n\nreturn [{ json: output }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "2f9c4472-8d36-4b2e-bb6f-00bae31ac08b",
+      "name": "Create the main json"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nconst piAdr = \"host.docker.internal\"\n\nreturn {\n  piAdr: piAdr\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        48,
+        0
+      ],
+      "id": "87e39654-5127-4448-8371-3c7195f9c60c",
+      "name": "Code in JavaScript"
+    }
+  ],
+  "pinData": {
+    "Timer Trigger": [
+      {
+        "json": {}
+      }
+    ]
+  },
+  "connections": {
+    "Timer Trigger": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch entites from HA": {
+      "main": [
+        [
+          {
+            "node": "Create the main json",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Fetch entites from HA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "1bc17a93-fffa-4cd8-9c46-e9188d61dfed",
+  "meta": {
+    "instanceId": "575ddb137b9fe283573f6a90a36bc8dfe6740a9d1bc2af6faeaacdc43dee02a7"
+  },
+  "id": "nGBiqDTfgkFEzbkZ",
+  "tags": []
+}

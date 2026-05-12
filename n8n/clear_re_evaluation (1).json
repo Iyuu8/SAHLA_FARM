@@ -1,0 +1,256 @@
+{
+  "name": "clear_re_evaluation",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "b0c76b68-bf5b-4daf-a6af-e41c6dfda6c5",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst actuators = input.actuators || [];\nconst adr = input.meta.adr;\n\n// We use the services endpoint to preserve the UI functionality in HA\nconst BASE_URL = `http://${adr}:8123/api/services/input_datetime/set_datetime`;\n\n// A date guaranteed to be in the past\nconst PAST_DATETIME = \"2000-01-01 00:00:00\"; \n\nconst result = [];\n\nfor (const actuator of actuators) {\n  if (actuator.classification === \"NOW-RE-EVALUATING\") {\n    const type = actuator.type; // 'pump' or 'fan'\n\n    // 1. Clear the re-evaluation START time\n    result.push({\n      json: {\n        url: BASE_URL,\n        body: {\n          entity_id: `input_datetime.${type}_re_evaluation_start`,\n          datetime: PAST_DATETIME\n        }\n      }\n    });\n\n    // 2. Clear the re-evaluation END time\n    result.push({\n      json: {\n        url: BASE_URL,\n        body: {\n          entity_id: `input_datetime.${type}_re_evaluation_end`,\n          datetime: PAST_DATETIME\n        }\n      }\n    });\n  }\n}\n\n// If no actuators are \"NOW-RE-EVALUATING\", this returns an empty array.\n// In n8n, an empty array means the next HTTP Request node simply won't run.\n\nreturn result;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "a016a012-0fd8-4cb9-b06e-b530505afd0e",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "{\n        \"Authorization\": \"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJlMzg5YTNiYzg0OWE0ODRiYmI2Y2M0ZjhjNDE4ZmM5YSIsImlhdCI6MTc3NDkxMTA1MywiZXhwIjoyMDkwMjcxMDUzfQ.ntEjr2TFoCOHg-yOv6bBqikvTayGDVbqwtZ6zkCAu8Q\",\n        \"Content-Type\": \"application/json\"\n      }",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.body }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        416,
+        0
+      ],
+      "id": "371424c5-424e-41df-ba4f-eedf5937fb6f",
+      "name": "HTTP Request"
+    }
+  ],
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "meta": {
+            "run_id": "07453d-b2b27d0b210d",
+            "triggered_at": "2026-04-01T19:56:30+01:00",
+            "adr": "10.204.9.237"
+          },
+          "location": {
+            "latitude": 36.716781245509864,
+            "longitude": 3.1546447886010713,
+            "timezone": "Africa/Algiers"
+          },
+          "crop": {
+            "type": "Carrot",
+            "growth_stage": "Seedling",
+            "mode": "Balanced"
+          },
+          "sensors": [
+            {
+              "type": "soil_moisture",
+              "value": 0,
+              "description": null
+            },
+            {
+              "type": "temperature",
+              "value": 22,
+              "description": null
+            },
+            {
+              "type": "air_humidity",
+              "value": 73.5,
+              "description": null
+            },
+            {
+              "type": "luminosity",
+              "value": 53,
+              "description": null
+            }
+          ],
+          "actuators": [
+            {
+              "type": "pump",
+              "status": "off",
+              "control_mode": "auto",
+              "classification": "NOW-RE-EVALUATING",
+              "skipped": true,
+              "run": {
+                "active": false,
+                "execute_at": null,
+                "duration_minutes": null,
+                "execute_until": null
+              },
+              "re_evaluation": {
+                "active": true,
+                "skipped": true,
+                "interval": {
+                  "start": "2026-04-02T05:02:00+01:00",
+                  "end": "2026-04-02T07:02:00+01:00"
+                }
+              }
+            },
+            {
+              "type": "fan",
+              "status": "on",
+              "control_mode": "auto",
+              "classification": "NOW-RE-EVALUATING",
+              "skipped": true,
+              "run": {
+                "active": false,
+                "execute_at": null,
+                "duration_minutes": null,
+                "execute_until": null
+              },
+              "re_evaluation": {
+                "active": true,
+                "skipped": true,
+                "interval": {
+                  "start": "2026-04-02T05:02:00+01:00",
+                  "end": "2026-04-02T07:02:00+01:00"
+                }
+              }
+            }
+          ],
+          "notifications": null,
+          "warnings": [
+            {
+              "name": "frost_risk",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "heavy_rainfall",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "high_humidity_level",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "high_temperature_detected",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "insufficient_sunlight",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "excessive_sunlight",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "low_soil_moisture",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "overwatering",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "strong_wind",
+              "active": false,
+              "severity": null,
+              "description": null
+            }
+          ],
+          "recommendation": null,
+          "weather": {
+            "precipitation_probability": null,
+            "state": null,
+            "summary": null
+          },
+          "history": {
+            "runs": null,
+            "images": null
+          },
+          "image_processing": {
+            "summary": null,
+            "features": {
+              "rain_detected": null,
+              "water_on_leaves": null,
+              "cloud_cover": null,
+              "lighting_level": null,
+              "shadows_present": null,
+              "plant_motion_detected": null,
+              "motion_intensity": null
+            },
+            "confidence": null
+          }
+        }
+      }
+    ]
+  },
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "0152cae7-f193-4e4f-957c-da29a3094f52",
+  "meta": {
+    "instanceId": "575ddb137b9fe283573f6a90a36bc8dfe6740a9d1bc2af6faeaacdc43dee02a7"
+  },
+  "id": "GgwtfPIH40dW4tp6",
+  "tags": []
+}

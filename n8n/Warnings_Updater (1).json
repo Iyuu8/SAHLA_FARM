@@ -1,0 +1,415 @@
+{
+  "name": "Warnings_Updater",
+  "nodes": [
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-safeguard-20b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        528,
+        224
+      ],
+      "id": "3fa803fb-3961-40af-85c6-4d6311ebea76",
+      "name": "Groq Chat Model4",
+      "credentials": {
+        "groqApi": {
+          "id": "ouG5tf0SSQ7ropQe",
+          "name": "Groq account 8"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const main = items[0].json;\n\nconst output = {\n  time:    main.meta.triggered_at,\n  crop:    main.crop ?? null,\n  sensors: (main.sensors ?? []).map(s => ({\n    type:  s.type,\n    value: s.value\n  })),\n  weather: {\n    state:                     main.weather.state,\n    precipitation_probability: main.weather.precipitation_probability,\n    summary:                   main.weather.summary\n  },\n  image_processing: {\n    features:   main.image_processing.features ?? null,\n    confidence: main.image_processing.confidence ?? null\n  },\n  warnings: (main.warnings ?? []).map(w => ({\n    name: w.name\n  }))\n};\n\nreturn [{ json: output }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "7fee8dbf-5d4b-4156-b073-2054338b2ca3",
+      "name": "filter only needed data"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=CURRENT TIME:\n{{$json.time}}\n\nCROP INFO:\n- Type:         {{$json.crop.type}}\n- Growth stage: {{$json.crop.growth_stage}}\n- Farm mode:    {{$json.crop.mode}}\n\nSENSOR READINGS:\n{{$json.sensors.map(s => `- ${s.type}: ${s.value}`).join('\\n')}}\n\nWEATHER:\n- State:                     {{$json.weather.state}}\n- Precipitation probability: {{$json.weather.precipitation_probability}}%\n- Summary:                   {{$json.weather.summary}}\n\nIMAGE PROCESSING:\n- Confidence:          {{$json.image_processing.confidence}}%\n- Rain detected:       {{$json.image_processing.features.rain_detected}}\n- Water on leaves:     {{$json.image_processing.features.water_on_leaves}}\n- Cloud cover:         {{$json.image_processing.features.cloud_cover}}\n- Lighting level:      {{$json.image_processing.features.lighting_level}}\n- Plant motion:        {{$json.image_processing.features.plant_motion_detected}}\n- Motion intensity:    {{$json.image_processing.features.motion_intensity}}\n\nWARNINGS TO EVALUATE ({{$json.warnings.length}} total):\n{{$json.warnings.map(w => `- ${w.name}`).join('\\n')}}\n\nFor each of the {{$json.warnings.length}} warning(s) above, evaluate if it is active, assign a severity (0-100), and write a ~68 character description.\n\nReturn a JSON array of exactly {{$json.warnings.length}} objects, each with \"name\", \"active\", \"severity\", \"description\" only.\nSame order as received. No explanation, no markdown.",
+        "options": {
+          "systemMessage": "You are an expert agricultural risk analyst. You receive real-time farm data and your job is to evaluate a fixed list of warnings, and for each one decide if it is active or not, assign a severity score, and write a short description.\n\n─── YOUR JOB ────────────────────────────────────────────────────────────────────\n\nFor each warning in the list you receive, you must:\n1. Decide if it is active (true) or not (false) based on the sensor readings, weather, and image processing data\n2. Assign a severity score from 0 to 100 (0 = no risk at all, 100 = extreme/critical risk)\n3. Write a short plain-language description (~68 characters) explaining the situation\n\n─── WARNING EVALUATION RULES ────────────────────────────────────────────────────\n\nUse the following signals to evaluate each warning:\n\n- frost_risk               → temperature sensor + weather state. Active if temp is very low or weather suggests freezing conditions. Critical during flowering stage.\n- heavy_rainfall           → weather precipitation_probability + image rain_detected. Active if probability is high or rain is detected in image.\n- high_humidity_level      → air_humidity sensor. Active if humidity is too high for the crop and growth stage.\n- high_temperature_detected→ temperature sensor. Active if temperature exceeds safe thresholds for the crop.\n- insufficient_sunlight    → luminosity sensor + weather state. Active if luminosity is too low for the crop's needs.\n- excessive_sunlight       → luminosity sensor. Active if luminosity is dangerously high.\n- low_soil_moisture        → soil_moisture sensor. Active if soil is too dry for the crop and growth stage.\n- overwatering             → soil_moisture sensor + image water_on_leaves. Active if soil is saturated or leaves show water.\n- strong_wind              → image plant_motion_detected + motion_intensity. Active if plants show strong motion.\n\n─── SEVERITY SCALE ──────────────────────────────────────────────────────────────\n\n- 0        → warning is not active, no risk\n- 1-25     → minor risk, monitor the situation\n- 26-50    → moderate risk, attention needed\n- 51-75    → significant risk, action recommended\n- 76-100   → critical risk, immediate action required\n\nIf a warning is not active, severity must be 0.\nIf a warning is active, severity must be at least 1.\n\n─── DESCRIPTION RULES ───────────────────────────────────────────────────────────\n\n- ~68 characters, maximum 90 characters\n- If active: explain the risk and its impact on the plant with appropriate urgency\n- If not active: write a short reassuring message (e.g. \"No frost risk detected, your crop is safe.\")\n- Always mention the crop type or plant in the description\n- Never just repeat the sensor value, always interpret its meaning\n\n─── OUTPUT FORMAT ───────────────────────────────────────────────────────────────\n\nReturn ONLY a valid JSON array, one object per warning, same order as received.\nEach object must have exactly four fields: \"name\", \"active\", \"severity\", \"description\".\nNo explanation, no commentary, no markdown, no code blocks.\n\nExample:\n[\n  {\"name\": \"frost_risk\", \"active\": false, \"severity\": 0, \"description\": \"No frost risk detected, your orange trees are safe.\"},\n  {\"name\": \"heavy_rainfall\", \"active\": true, \"severity\": 72, \"description\": \"Heavy rain likely soon, risk of waterlogging for flowering oranges.\"}\n]\n\n─── STRICT OUTPUT RULES ─────────────────────────────────────────────────────────\n\n- Return ONLY the JSON array, nothing else\n- Exactly the same number of objects as warnings received, same order\n- Do not add any extra fields\n- Do not rename warning names\n- severity must be 0 when active is false, and >= 1 when active is true\n- All times in \"HH:MM\" 24h format if needed\n\nIMPORTANT: \navoid making contradictions; the following pairs of warnings cannot be triggered simultanuously\noverwatering - low soil moisture\nexcessive sunlight - insufficient sunlight \nhigh temperature - frost risk\nheavy rainfall - low soil moisture\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        448,
+        0
+      ],
+      "id": "2738c1a2-df0f-4362-9004-184ccbe4f936",
+      "name": "Warnings_Updater_Agent"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw      = JSON.parse($input.first().json.output);\nconst mainJson = { ...$('Sensors_Updater').first().json };\n\n// ─── Merge warnings ───────────────────────────────────────────────────────────\nconst warningsMap = {};\nraw.forEach(w => {\n  warningsMap[w.name.toLowerCase()] = w;\n});\nmainJson.warnings = mainJson.warnings.map(w => {\n  const updated = warningsMap[w.name.toLowerCase()];\n  if (!updated) return w;\n  return {\n    ...w,\n    active:      updated.active,\n    severity:    updated.severity,\n    description: updated.description\n  };\n});\n\n\n\n// ─── Remove history ───────────────────────────────────────────────────────────\ndelete mainJson.history;\n\nreturn [{ json: mainJson }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        0
+      ],
+      "id": "4e13442b-b54f-4069-b53b-ecb0c717f431",
+      "name": "Warnings_Updater"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "adb8ffc5-25d0-4d33-987f-eef03307ab1e",
+      "name": "Sensors_Updater"
+    }
+  ],
+  "pinData": {
+    "Sensors_Updater": [
+      {
+        "json": {
+          "meta": {
+            "run_id": "7c8516-b9a7b467b74d",
+            "triggered_at": "2026-04-07T03:31:36+01:00",
+            "adr": "10.245.251.237"
+          },
+          "location": {
+            "latitude": 36.716781245509864,
+            "longitude": 3.1546447886010713,
+            "timezone": "Africa/Algiers"
+          },
+          "crop": {
+            "type": "Carrot",
+            "growth_stage": "Seedling",
+            "mode": "Balanced"
+          },
+          "sensors": [
+            {
+              "type": "soil_moisture",
+              "value": 4,
+              "description": "Your soil is critically dry, irrigate immediately to keep seedlings healthy."
+            },
+            {
+              "type": "temperature",
+              "value": 22.5,
+              "description": "Temperature is comfortable, suitable for carrot seedling growth."
+            },
+            {
+              "type": "air_humidity",
+              "value": 60.1,
+              "description": "Humidity is adequate, not risking fungal issues for seedlings."
+            },
+            {
+              "type": "luminosity",
+              "value": 146,
+              "description": "Light levels are excessively high, risk of sunburn on tender seedlings."
+            }
+          ],
+          "actuators": [
+            {
+              "type": "pump",
+              "status": "on",
+              "control_mode": "semi-auto",
+              "classification": "TURN-ON",
+              "skipped": false,
+              "recommended_action": null,
+              "run": {
+                "active": true,
+                "execute_at": null,
+                "duration_minutes": null,
+                "execute_until": null
+              },
+              "re_evaluation": {
+                "active": false,
+                "skipped": false,
+                "interval": {
+                  "start": null,
+                  "end": null
+                }
+              }
+            },
+            {
+              "type": "fan",
+              "status": "off",
+              "control_mode": "auto",
+              "classification": "KEEP-OFF",
+              "skipped": false,
+              "run": {
+                "active": false,
+                "execute_at": null,
+                "duration_minutes": null,
+                "execute_until": null
+              },
+              "re_evaluation": {
+                "active": false,
+                "skipped": false,
+                "interval": {
+                  "start": null,
+                  "end": null
+                }
+              }
+            }
+          ],
+          "notifications": null,
+          "warnings": [
+            {
+              "name": "frost_risk",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "heavy_rainfall",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "high_humidity_level",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "high_temperature_detected",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "insufficient_sunlight",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "excessive_sunlight",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "low_soil_moisture",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "overwatering",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "strong_wind",
+              "active": false,
+              "severity": null,
+              "description": null
+            }
+          ],
+          "recommendation": "Turn on the pump to water the carrot seedlings; soil moisture is very low and no rain expected, so irrigation is needed.",
+          "weather": {
+            "precipitation_probability": 0,
+            "state": "sunny",
+            "summary": "Over the next 48 hours, Algiers will experience stable and dry weather conditions with no precipitation expected. Temperatures will gradually increase, reaching a peak of 28.9°C. Expect mostly sunny skies and pleasant conditions for agricultural activities.",
+            "insights": {
+              "highlights": {
+                "max_temperature": {
+                  "value": 28.9,
+                  "time": "2026-04-08T15:00"
+                },
+                "min_temperature": {
+                  "value": 15.2,
+                  "time": "2026-04-07T06:00"
+                }
+              },
+              "hourly": [
+                {
+                  "time": "2026-04-07T00:00",
+                  "temperature": 17,
+                  "humidity": 53,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-07T03:00",
+                  "temperature": 16.6,
+                  "humidity": 36,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-07T06:00",
+                  "temperature": 15.2,
+                  "humidity": 40,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-07T09:00",
+                  "temperature": 20.3,
+                  "humidity": 43,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-07T12:00",
+                  "temperature": 27.1,
+                  "humidity": 24,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-07T15:00",
+                  "temperature": 28.5,
+                  "humidity": 19,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-07T18:00",
+                  "temperature": 26.1,
+                  "humidity": 38,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-07T21:00",
+                  "temperature": 20.2,
+                  "humidity": 54,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-08T00:00",
+                  "temperature": 18.5,
+                  "humidity": 41,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-08T03:00",
+                  "temperature": 18.2,
+                  "humidity": 35,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-08T06:00",
+                  "temperature": 17.8,
+                  "humidity": 35,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-08T09:00",
+                  "temperature": 21.3,
+                  "humidity": 43,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-08T12:00",
+                  "temperature": 27,
+                  "humidity": 25,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-08T15:00",
+                  "temperature": 28.9,
+                  "humidity": 19,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-08T18:00",
+                  "temperature": 23.8,
+                  "humidity": 41,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-04-08T21:00",
+                  "temperature": 18.5,
+                  "humidity": 66,
+                  "precipitation_probability": 0
+                }
+              ]
+            }
+          },
+          "image_processing": {
+            "summary": "no image to be taken into consideration",
+            "features": {
+              "rain_detected": null,
+              "water_on_leaves": null,
+              "cloud_cover": null,
+              "lighting_level": null,
+              "shadows_present": null,
+              "plant_motion_detected": null,
+              "motion_intensity": null
+            },
+            "confidence": null
+          }
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Groq Chat Model4": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Warnings_Updater_Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "filter only needed data": {
+      "main": [
+        [
+          {
+            "node": "Warnings_Updater_Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Warnings_Updater_Agent": {
+      "main": [
+        [
+          {
+            "node": "Warnings_Updater",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sensors_Updater": {
+      "main": [
+        [
+          {
+            "node": "filter only needed data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "b8e944b9-70c3-4e78-b462-fc14730478b3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "575ddb137b9fe283573f6a90a36bc8dfe6740a9d1bc2af6faeaacdc43dee02a7"
+  },
+  "id": "fxE9DgX4BoZiFLgr",
+  "tags": []
+}

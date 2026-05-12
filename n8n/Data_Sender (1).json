@@ -1,0 +1,423 @@
+{
+  "name": "Data_Sender",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\nconst activeActuators = (input.actuators ?? []).filter(a => a.skipped === false && a.re_evaluation.skipped===false);\n\nconst actuators = activeActuators.length === 0 ? null : activeActuators.map(a => ({\n  type:           a.type,\n  status:         a.status ?? null,\n  classification: a.classification ?? null,\n  ...(a.control_mode === 'semi-auto' ? { recommended_action: a.recommended_action ?? null } : {}),\n  run:            a.run            ?? null,\n  re_evaluation:  a.re_evaluation  ?? null\n}));\n\nconst output = {\n  adr: $input.first().json.meta.adr,\n  sensors: (input.sensors ?? []).map(s => ({\n    type:        s.type,\n    description: s.description ?? null\n  })),\n  actuators,\n  notifications:  input.notifications  ?? null,\n  warnings:       input.warnings       ?? null,\n  recommendation: input.recommendation ?? null,\n  weather:        input.weather        ?? null\n};\n\nreturn [{ json: output }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "8b58b8c4-7d32-4640-acf2-d2644e00ad8e",
+      "name": "data sender filter"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─── 0. Get input from n8n ─────────────────────────────────────────────────────\nconst input = $input.first().json;\nconst entities = [];\n\n// ─── Helper: convert \"HH:MM\" to full ISO datetime using today's date ──────────\nfunction toFullDatetime(timeStr) {\n  if (!timeStr) return null;\n  if (timeStr.includes('T') || timeStr.length > 5) return timeStr;\n  const now = new Date();\n  const yyyy = now.getFullYear();\n  const mm   = String(now.getMonth() + 1).padStart(2, '0');\n  const dd   = String(now.getDate()).padStart(2, '0');\n  return `${yyyy}-${mm}-${dd}T${timeStr}:00`;\n}\n\n// ─── Helper: safe truncate to 255 chars ───────────────────────────────────────\nfunction safe(str) {\n  if (!str) return '';\n  return String(str).slice(0, 255);\n}\n\n// 1. Added 'sensors' to the destructuring\nconst { actuators, warnings, notifications, recommendation, sensors } = input;\nlet suggestedActionsList = [];\n\n// ─── 0.5. Check if actuators exist ────────────────────────────────────────────\n// true if actuators array is missing or has 0 items\nconst noActuators = !actuators || actuators.length === 0;\n\n// ─── 1. Loop through actuators ─────────────────────────────────────────────────\nif (!noActuators) {\n  for (const actuator of actuators) {\n    const type = actuator.type;\n    const classification = actuator.classification;\n\n    // ── NEED-RE-EVALUATION ──\n    if (classification === 'NEED-RE-EVALUATION') {\n      entities.push({\n        entity: `input_datetime.${type}_re_evaluation_start`,\n        value: toFullDatetime(actuator.re_evaluation?.interval?.start ?? null)\n      });\n      entities.push({\n        entity: `input_datetime.${type}_re_evaluation_end`,\n        value: toFullDatetime(actuator.re_evaluation?.interval?.end ?? null)\n      });\n    }\n\n    // ── TURN-ON ──\n    else if (classification === 'TURN-ON') {\n      entities.push({\n        entity: `input_datetime.${type}_execute_at`,\n        value: toFullDatetime(actuator.run?.execute_at ?? null)\n      });\n      entities.push({\n        entity: `input_datetime.${type}_execute_until`,\n        value: toFullDatetime(actuator.run?.execute_until ?? null)\n      });\n    }\n\n    // ── recommended_action ──\n    if (actuator.recommended_action) {\n      const bullet = `• ${actuator.recommended_action}`;\n      const currentLength = suggestedActionsList.join('\\n').length;\n      \n      const addedLength = currentLength > 0 ? bullet.length + 1 : bullet.length;\n      if (currentLength + addedLength <= 255) {\n        suggestedActionsList.push(bullet);\n      }\n    }\n  }\n}\n\n// ─── 2. Combined suggested actions entity ────────────────────────────────────\nif (suggestedActionsList.length > 0) {\n  entities.push({\n    entity: 'input_text.suggested_actions',\n    value: suggestedActionsList.join('\\n')\n  });\n} else {\n  // If no actuators exist, OR if none of them had a recommended_action\n  entities.push({\n    entity: 'input_text.suggested_actions',\n    value: '' \n  });\n}\n\n// ─── 3. Warnings ───────────────────────────────────────────────────────────────\nfor (const warning of (warnings ?? [])) {\n  // Original boolean state\n  entities.push({\n    entity: `input_boolean.${warning.name}`,\n    value: warning.active\n  });\n\n  // NEW: Extra Info state (description || severity)\n  const desc = warning.description ?? \"\";\n  const severity = warning.severity ?? 0;\n  entities.push({\n    entity: `input_text.${warning.name}_extra_info`,\n    value: safe(`${desc} || ${severity}`)\n  });\n}\n\n// ─── 3.5. Sensors (NEW) ──────────────────────────────────────────────────────\nfor (const sensor of (sensors ?? [])) {\n  // Map \"air_humidity\" to \"humidity\" to match your exact entity names\n  const sensorName = sensor.type === 'air_humidity' ? 'humidity' : sensor.type;\n  const desc = sensor.description ?? '';\n  \n  entities.push({\n    entity: `input_text.${sensorName}_description`,\n    value: safe(desc) // Keep safe() to prevent HA crashing on >255 chars\n  });\n}\n\n// ─── 4. General recommendation ────────────────────────────────────────────────\n// Only push to HA if actuators actually exist AND there is a recommendation text\nif (!noActuators && recommendation) {\n  entities.push({\n    entity: 'input_text.general_recommendation',\n    value: safe(recommendation)\n  });\n}\n\n// ─── 5. Notifications ─────────────────────────────────────────────────────────\nlet notifText = '';\nfor (const note of (notifications ?? [])) {\n  const line = `• ${note.title}: ${note.description}\\n`;\n  if ((notifText.length + line.length) > 255) break;\n  notifText += line;\n}\nif (notifText) {\n  entities.push({\n    entity: 'input_text.notifications',\n    value: notifText.trim()\n  });\n} else {\n  entities.push({\n    entity: 'input_text.notifications',\n    value: ''\n  });\n}\n\n// ─── 6. Return all entities for n8n ───────────────────────────────────────────\nreturn entities.map(e => ({ json: e }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "61d6e9ac-a25e-4f97-bb9c-7b13e940a470",
+      "name": "entity + value pairs maker"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\n// Retrieve the 'adr' directly from node 1\nconst adr = $('data sender filter').first().json.adr;\nconst BASE_URL = `http://${adr}:8123/api/`;\n\nconst result = [];\n\nfor (const item of items) {\n  const entityId = item.json.entity;\n  const stateValue = item.json.value;\n  const domain = entityId.split('.')[0]; \n  \n  let finalUrl = '';\n  let finalBody = {};\n\n  // 1. USE SERVICES FOR DATETIMES (Preserves UI)\n  if (domain === 'input_datetime') {\n    if (!stateValue) continue; // Skip if no time is provided\n    \n    finalUrl = `${BASE_URL}services/input_datetime/set_datetime`;\n    finalBody = {\n      entity_id: entityId,\n      // Format: YYYY-MM-DD HH:MM:SS\n      datetime: String(stateValue).replace('T', ' ').substring(0, 19)\n    };\n  } \n  \n  // 2. USE STATES FOR EVERYTHING ELSE (More reliable for text/booleans)\n  else {\n    finalUrl = `${BASE_URL}states/${entityId}`;\n    \n    let formattedState;\n    if (typeof stateValue === 'boolean') {\n      formattedState = stateValue ? 'on' : 'off';\n    } else {\n      formattedState = (stateValue === null || stateValue === undefined) ? '' : String(stateValue);\n    }\n\n    finalBody = {\n      state: formattedState,\n      attributes: {} // Optional, but helps keep the object structure clean\n    };\n  }\n\n  result.push({\n    json: {\n      url: finalUrl,\n      body: finalBody\n    }\n  });\n}\n\nreturn result;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ],
+      "id": "9fc6c942-bc42-4e9d-8f31-1ba30b79efc2",
+      "name": "join each value with the url in ha"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "{\n        \"Authorization\": \"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJlMzg5YTNiYzg0OWE0ODRiYmI2Y2M0ZjhjNDE4ZmM5YSIsImlhdCI6MTc3NDkxMTA1MywiZXhwIjoyMDkwMjcxMDUzfQ.ntEjr2TFoCOHg-yOv6bBqikvTayGDVbqwtZ6zkCAu8Q\",\n        \"Content-Type\": \"application/json\"\n      }",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.body }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        896,
+        0
+      ],
+      "id": "68ce93da-6327-49ba-9441-763cc5617031",
+      "name": "data sender",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "8c9edc4a-3b5e-4f3a-8732-4002bde911e4",
+      "name": "Notifications_Manager"
+    }
+  ],
+  "pinData": {
+    "Notifications_Manager": [
+      {
+        "json": {
+          "meta": {
+            "run_id": "d471b9-147929a63ab1",
+            "triggered_at": "2026-04-01T10:00:00+01:00",
+            "adr": "10.90.33.237"
+          },
+          "location": {
+            "latitude": 36.716781245509864,
+            "longitude": 3.1546447886010713,
+            "timezone": "Africa/Algiers"
+          },
+          "crop": {
+            "type": "Carrot",
+            "growth_stage": "Seedling",
+            "mode": "Balanced"
+          },
+          "sensors": [
+            {
+              "type": "soil_moisture",
+              "value": 12,
+              "description": "Your soil is critically dry, irrigate immediately to protect seedlings."
+            },
+            {
+              "type": "temperature",
+              "value": 36.5,
+              "description": "Temperature is dangerously high, seedlings suffer heat stress."
+            },
+            {
+              "type": "air_humidity",
+              "value": 30,
+              "description": "Humidity is quite low, seedlings risk dehydration."
+            },
+            {
+              "type": "luminosity",
+              "value": 85000,
+              "description": "Light intensity is extremely high, risk of sunburn on seedlings."
+            }
+          ],
+          "actuators": [
+            {
+              "type": "pump",
+              "status": "on",
+              "control_mode": "semi-auto",
+              "classification": "NEED-RE-EVALUATION",
+              "skipped": false,
+              "run": {
+                "active": false,
+                "execute_at": null,
+                "duration_minutes": null,
+                "execute_until": null
+              },
+              "re_evaluation": {
+                "active": true,
+                "skipped": false,
+                "interval": {
+                  "start": "2026-04-01T15:00:00+01:00",
+                  "end": "2026-04-01T15:30:00+01:00"
+                }
+              },
+              "recommended_action": "Wet leaves and rain detected, re-evaluation required"
+            },
+            {
+              "type": "fan",
+              "status": "off",
+              "control_mode": "semi-auto",
+              "classification": "NEED-RE-EVALUATION",
+              "skipped": false,
+              "run": {
+                "active": false,
+                "execute_at": null,
+                "duration_minutes": null,
+                "execute_until": null
+              },
+              "re_evaluation": {
+                "active": true,
+                "skipped": false,
+                "interval": {
+                  "start": "2026-04-01T15:00:00+01:00",
+                  "end": "2026-04-01T15:30:00+01:00"
+                }
+              },
+              "recommended_action": "Rain detected with moderate wind, re-evaluation required"
+            }
+          ],
+          "notifications": [
+            {
+              "title": "Pump Re‑evaluation Needed",
+              "description": "Wet leaves and rain detected, re‑evaluation required."
+            },
+            {
+              "title": "Fan Re‑evaluation Needed",
+              "description": "Rain detected with moderate wind, re‑evaluation required."
+            }
+          ],
+          "warnings": [
+            {
+              "name": "frost_risk",
+              "active": false,
+              "severity": 0,
+              "description": "No frost risk detected, your carrot seedlings are safe."
+            },
+            {
+              "name": "heavy_rainfall",
+              "active": true,
+              "severity": 70,
+              "description": "Heavy rain detected, risk of waterlogging for carrot seedlings."
+            },
+            {
+              "name": "high_humidity_level",
+              "active": false,
+              "severity": 0,
+              "description": "Humidity is low, no excess moisture risk for carrots."
+            },
+            {
+              "name": "high_temperature_detected",
+              "active": true,
+              "severity": 60,
+              "description": "High temp (36.5°C) may stress carrot seedlings."
+            },
+            {
+              "name": "insufficient_sunlight",
+              "active": true,
+              "severity": 45,
+              "description": "Low light limits growth; carrots need more sun."
+            },
+            {
+              "name": "excessive_sunlight",
+              "active": false,
+              "severity": 0,
+              "description": "Light levels are normal, no overexposure risk for carrots."
+            },
+            {
+              "name": "low_soil_moisture",
+              "active": true,
+              "severity": 50,
+              "description": "Dry soil (12%) threatens carrot seedling roots."
+            },
+            {
+              "name": "overwatering",
+              "active": true,
+              "severity": 40,
+              "description": "Leaves soaked from recent rain, overwatering risk for carrots."
+            },
+            {
+              "name": "strong_wind",
+              "active": false,
+              "severity": 0,
+              "description": "Wind conditions are calm, no risk to carrot seedlings."
+            }
+          ],
+          "recommendation": "No recommended actions or indications for now.",
+          "weather": {
+            "precipitation_probability": 93,
+            "state": "cloudy",
+            "summary": "Early morning hours (00-06 UTC) show a high probability of rain (up to 93%) as cloud cover thickens, but by late morning the chance drops sharply, giving a window for dry conditions. A gradual warming follows, with temperatures climbing from 18°C to a peak of about 22°C around 16-18 UTC, then easing back to mid-teens by the next day. Overall, the forecast is dominated by cloudy skies with a brief high-risk rain period early on, followed by a mild heat spell and low precipitation chances thereafter.",
+            "insights": {
+              "highlights": {
+                "max_temperature": {
+                  "value": 22.2,
+                  "time": "2026-05-06T13:00:00+01:00"
+                },
+                "min_temperature": {
+                  "value": 16.2,
+                  "time": "2026-05-06T06:00:00+01:00"
+                }
+              },
+              "hourly": [
+                {
+                  "time": "2026-05-05T00:00:00+01:00",
+                  "temperature": 17.8,
+                  "humidity": 95,
+                  "precipitation_probability": 88
+                },
+                {
+                  "time": "2026-05-05T03:00:00+01:00",
+                  "temperature": 17.6,
+                  "humidity": 87,
+                  "precipitation_probability": 55
+                },
+                {
+                  "time": "2026-05-05T06:00:00+01:00",
+                  "temperature": 17.2,
+                  "humidity": 87,
+                  "precipitation_probability": 25
+                },
+                {
+                  "time": "2026-05-05T09:00:00+01:00",
+                  "temperature": 19.3,
+                  "humidity": 84,
+                  "precipitation_probability": 20
+                },
+                {
+                  "time": "2026-05-05T12:00:00+01:00",
+                  "temperature": 19.8,
+                  "humidity": 81,
+                  "precipitation_probability": 43
+                },
+                {
+                  "time": "2026-05-05T15:00:00+01:00",
+                  "temperature": 19.6,
+                  "humidity": 78,
+                  "precipitation_probability": 73
+                },
+                {
+                  "time": "2026-05-05T18:00:00+01:00",
+                  "temperature": 19,
+                  "humidity": 68,
+                  "precipitation_probability": 20
+                },
+                {
+                  "time": "2026-05-05T21:00:00+01:00",
+                  "temperature": 17.7,
+                  "humidity": 86,
+                  "precipitation_probability": 5
+                },
+                {
+                  "time": "2026-05-06T00:00:00+01:00",
+                  "temperature": 17.1,
+                  "humidity": 90,
+                  "precipitation_probability": 8
+                },
+                {
+                  "time": "2026-05-06T03:00:00+01:00",
+                  "temperature": 17,
+                  "humidity": 80,
+                  "precipitation_probability": 3
+                },
+                {
+                  "time": "2026-05-06T06:00:00+01:00",
+                  "temperature": 16.2,
+                  "humidity": 94,
+                  "precipitation_probability": 5
+                },
+                {
+                  "time": "2026-05-06T09:00:00+01:00",
+                  "temperature": 19,
+                  "humidity": 83,
+                  "precipitation_probability": 3
+                },
+                {
+                  "time": "2026-05-06T12:00:00+01:00",
+                  "temperature": 22.1,
+                  "humidity": 60,
+                  "precipitation_probability": 3
+                },
+                {
+                  "time": "2026-05-06T15:00:00+01:00",
+                  "temperature": 21.9,
+                  "humidity": 54,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-05-06T18:00:00+01:00",
+                  "temperature": 20.3,
+                  "humidity": 63,
+                  "precipitation_probability": 0
+                },
+                {
+                  "time": "2026-05-06T21:00:00+01:00",
+                  "temperature": 18,
+                  "humidity": 70,
+                  "precipitation_probability": 0
+                }
+              ]
+            }
+          },
+          "image_processing": {
+            "summary": "The image depicts a field with hay bales on a stormy day with rain falling from the sky. The plants appear to be slightly bent, and the sky is heavily overcast. Raindrops are visible falling from the sky, and the leaves or soil appear to be wet. The lighting level seems to be low due to the overcast sky, and there are no distinct shadows visible. The motion of the plants suggests wind, but it's not extreme.",
+            "features": {
+              "rain_detected": true,
+              "water_on_leaves": true,
+              "cloud_cover": "high",
+              "lighting_level": "low",
+              "shadows_present": false,
+              "plant_motion_detected": true,
+              "motion_intensity": "moderate"
+            },
+            "confidence_rain": 100,
+            "confidence_wind": 80
+          }
+        }
+      }
+    ]
+  },
+  "connections": {
+    "data sender filter": {
+      "main": [
+        [
+          {
+            "node": "entity + value pairs maker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "entity + value pairs maker": {
+      "main": [
+        [
+          {
+            "node": "join each value with the url in ha",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "join each value with the url in ha": {
+      "main": [
+        [
+          {
+            "node": "data sender",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notifications_Manager": {
+      "main": [
+        [
+          {
+            "node": "data sender filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "06837a18-e007-42af-b90b-30e1cbdc263f",
+  "meta": {
+    "instanceId": "575ddb137b9fe283573f6a90a36bc8dfe6740a9d1bc2af6faeaacdc43dee02a7"
+  },
+  "id": "x4WNn4Gb8p2uuIic",
+  "tags": []
+}

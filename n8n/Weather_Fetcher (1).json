@@ -1,0 +1,335 @@
+{
+  "name": "Weather_Fetcher",
+  "nodes": [
+    {
+      "parameters": {
+        "model": "openai/gpt-3.5-turbo",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        448,
+        224
+      ],
+      "id": "377c5f72-716e-4cdc-b245-748172db63c2",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "WLCvUNC4W3yTLxVM",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://api.open-meteo.com/v1/forecast?latitude={{ $json.location.latitude }}&longitude={{ $json.location.longitude }}&hourly=temperature_2m,relative_humidity_2m,precipitation_probability&forecast_days=2&timezone={{ $json.location.timezone }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        224,
+        0
+      ],
+      "id": "2b030a5f-3ac4-4f62-990d-024d33499ecf",
+      "name": "Weather_API_Call"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyze the following raw hourly weather data for the Algiers site over the next 48 hours:\n\nTIMESTAMPS:\n{{ JSON.stringify($json.hourly.time) }}\n\nTEMPERATURES (°C):\n{{ JSON.stringify($json.hourly.temperature_2m) }}\n\nPRECIPITATION PROBABILITY (%):\n{{ JSON.stringify($json.hourly.precipitation_probability) }}\n\nBased on this data, return a JSON object with:\n- \"summary\": a 2-4 sentence weather narrative covering atmospheric transitions, rain risks, and heat peaks\n- \"state\": the dominant weather condition, must be one of: \"sunny\", \"cloudy\", \"rainy\", \"snowy\", \"stormy\", \"foggy\"\n- \"precipitation_probability\": a single number (0-100) representing the overall precipitation risk for the next 48 hours\n\nReturn only the JSON object, nothing else.",
+        "options": {
+          "systemMessage": "You are a Meteorological Strategist specialized in agricultural weather analysis. You receive raw hourly weather data for a specific site and your job is to interpret it and return a structured JSON response.\n\n─── OUTPUT FORMAT ───────────────────────────────────────────────────\n\nYou must return ONLY a valid JSON object with exactly these three fields:\n\n{\n  \"summary\": \"...\",\n  \"state\": \"...\",\n  \"precipitation_probability\": ...\n}\n\nField rules:\n- \"summary\": a concise but insightful weather narrative for the next 48 hours, highlighting significant atmospheric transitions, immediate rain risks, and intensity of daily heat peaks. 2-4 sentences maximum.\n- \"state\": a single word representing the dominant weather condition. Must be one of: \"sunny\", \"cloudy\", \"rainy\", \"snowy\", \"stormy\", \"foggy\"\n- \"precipitation_probability\": a single number (0-100) representing the overall precipitation probability for the next 48 hours, derived from the hourly data (use the peak or average, whichever is more representative for agricultural decisions)\n\n─── STRICT OUTPUT RULES ─────────────────────────────────────────────\n\n- Return ONLY the JSON object, nothing else\n- No explanation, no commentary, no markdown, no code blocks\n- Do not add any extra fields\n- \"state\" must be exactly one of the six allowed values, lowercase"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        448,
+        0
+      ],
+      "id": "f39ef596-14c6-40af-8584-2fc2761988b5",
+      "name": "Weather_Agent"
+    },
+    {
+      "parameters": {
+        "jsCode": "const mainJson = { ...( $('Preliminary_Decisions').first().json ) };\nconst raw = $('Weather_Agent').first().json.output;\nconst weather = JSON.parse(raw);\nconst weatherRaw = $('Weather_API_Call').first().json;\n\nmainJson.weather.summary = weather.summary;\nmainJson.weather.state = weather.state;\nmainJson.weather.precipitation_probability = weather.precipitation_probability;\n\n// ─── Calculate Dynamic Timezone Offset ────────────────────────────────────────\n\nconst tz = mainJson.location?.timezone || 'Africa/Algiers';\n\nfunction getTzOffsetStr(timeZone) {\n  const date = new Date();\n  const utcDate = new Date(date.toLocaleString('en-US', { timeZone: 'UTC' }));\n  const tzDate = new Date(date.toLocaleString('en-US', { timeZone }));\n  \n  const diffMinutes = Math.round((tzDate - utcDate) / 60000);\n  const sign = diffMinutes >= 0 ? '+' : '-';\n  const hours = String(Math.floor(Math.abs(diffMinutes) / 60)).padStart(2, '0');\n  const minutes = String(Math.abs(diffMinutes) % 60).padStart(2, '0');\n  \n  return `${sign}${hours}:${minutes}`;\n}\n\nconst offset = getTzOffsetStr(tz);\n\n// Helper to format Open-Meteo time (YYYY-MM-DDTHH:mm) to our strict standard\nfunction formatMeteoTime(meteoTime) {\n  // Appends \":00\" for seconds, plus the dynamic offset\n  return `${meteoTime}:00${offset}`;\n}\n\n// ─── Build weather insights ───────────────────────────────────────────────────\n\nconst times    = weatherRaw.hourly.time;\nconst temps    = weatherRaw.hourly.temperature_2m;\nconst humidity = weatherRaw.hourly.relative_humidity_2m;\nconst precip   = weatherRaw.hourly.precipitation_probability;\n\n// Find max and min temperature\nlet maxTemp = { value: -Infinity, time: null };\nlet minTemp = { value:  Infinity, time: null };\n\ntemps.forEach((t, i) => {\n  if (t > maxTemp.value) maxTemp = { value: t, time: formatMeteoTime(times[i]) };\n  if (t < minTemp.value) minTemp = { value: t, time: formatMeteoTime(times[i]) };\n});\n\n// Keep only every 3 hours to reduce size (48h → 16 entries)\nconst hourly = times\n  .map((t, i) => ({\n    time:                      formatMeteoTime(t),\n    temperature:               temps[i],\n    humidity:                  humidity[i],\n    precipitation_probability: precip[i]\n  }))\n  .filter((_, i) => i % 3 === 0);\n\nmainJson.weather.insights = {\n  highlights: {\n    max_temperature: maxTemp,\n    min_temperature: minTemp\n  },\n  hourly\n};\n\nreturn [{ json: mainJson }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        0
+      ],
+      "id": "0e2566ca-0e64-4d32-822e-c330ddf4f81a",
+      "name": "Weather_Enriched"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "358ba414-efb8-4954-a204-bd117f7997bd",
+      "name": "Preliminary_Decisions"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-20b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        272,
+        272
+      ],
+      "id": "4905000f-3a6e-4167-8767-7afcd476b8a9",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "buKU99C1SU4PlWnl",
+          "name": "Groq account 6"
+        }
+      }
+    }
+  ],
+  "pinData": {
+    "Preliminary_Decisions": [
+      {
+        "json": {
+          "meta": {
+            "run_id": "d471b9-147929a63ab1",
+            "triggered_at": "2026-04-29T09:29:04+01:00",
+            "adr": "10.90.33.237"
+          },
+          "location": {
+            "latitude": 36.716781245509864,
+            "longitude": 3.1546447886010713,
+            "timezone": "Africa/Algiers"
+          },
+          "crop": {
+            "type": "Carrot",
+            "growth_stage": "Seedling",
+            "mode": "Balanced"
+          },
+          "sensors": [
+            {
+              "type": "soil_moisture",
+              "value": 12,
+              "description": null
+            },
+            {
+              "type": "temperature",
+              "value": 25,
+              "description": null
+            },
+            {
+              "type": "air_humidity",
+              "value": 30,
+              "description": null
+            },
+            {
+              "type": "luminosity",
+              "value": 85000,
+              "description": null
+            }
+          ],
+          "actuators": [
+            {
+              "type": "pump",
+              "status": "off",
+              "control_mode": "semi-auto",
+              "classification": "TURN-ON",
+              "skipped": false,
+              "run": {
+                "active": false,
+                "execute_at": null,
+                "duration_minutes": null,
+                "execute_until": null
+              },
+              "re_evaluation": {
+                "active": true,
+                "skipped": false,
+                "interval": {
+                  "start": "2026-04-29T09:00:00+01:00",
+                  "end": "2026-04-29T10:00:00+01:00"
+                }
+              }
+            },
+            {
+              "type": "fan",
+              "status": "on",
+              "control_mode": "semi-auto",
+              "classification": "TURN-OFF",
+              "skipped": false,
+              "run": {
+                "active": false,
+                "execute_at": null,
+                "duration_minutes": null,
+                "execute_until": null
+              },
+              "re_evaluation": {
+                "active": false,
+                "skipped": false,
+                "interval": {
+                  "start": null,
+                  "end": null
+                }
+              },
+              "recommended_action": "Temperature 25°C and humidity 30% are within acceptable ranges; no cooling needed."
+            }
+          ],
+          "notifications": null,
+          "warnings": [
+            {
+              "name": "frost_risk",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "heavy_rainfall",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "high_humidity_level",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "high_temperature_detected",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "insufficient_sunlight",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "excessive_sunlight",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "low_soil_moisture",
+              "active": true,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "overwatering",
+              "active": false,
+              "severity": null,
+              "description": null
+            },
+            {
+              "name": "strong_wind",
+              "active": true,
+              "severity": null,
+              "description": null
+            }
+          ],
+          "recommendation": null,
+          "weather": {
+            "precipitation_probability": null,
+            "state": null,
+            "summary": null
+          },
+          "history": {
+            "runs": null
+          },
+          "image_processing": {
+            "summary": null,
+            "features": {
+              "rain_detected": null,
+              "water_on_leaves": null,
+              "cloud_cover": null,
+              "lighting_level": null,
+              "shadows_present": null,
+              "plant_motion_detected": null,
+              "motion_intensity": null
+            },
+            "confidence_rain": null,
+            "confidence_wind": null
+          }
+        }
+      }
+    ]
+  },
+  "connections": {
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        []
+      ]
+    },
+    "Weather_API_Call": {
+      "main": [
+        [
+          {
+            "node": "Weather_Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weather_Agent": {
+      "main": [
+        [
+          {
+            "node": "Weather_Enriched",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preliminary_Decisions": {
+      "main": [
+        [
+          {
+            "node": "Weather_API_Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Weather_Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "f1a08ba0-19df-4242-b693-262820747239",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "575ddb137b9fe283573f6a90a36bc8dfe6740a9d1bc2af6faeaacdc43dee02a7"
+  },
+  "id": "ujinj9mgtHiNxaTQ",
+  "tags": []
+}
