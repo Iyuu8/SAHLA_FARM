@@ -1,3 +1,9 @@
 [submodule "webAppFront"]
 	path = webAppFront
 	url = https://github.com/Iyuu8/SAHLA_FARM_FRONT.git
+[submodule "SAHLA_FARM_FRONT_APP"]
+	path = SAHLA_FARM_FRONT_APP
+	url = https://github.com/haitemLaou/SAHLA_FARM_FRONT_APP.git
+[submodule "SAHLA_FARM_PROJECT_BACKEND"]
+	path = SAHLA_FARM_PROJECT_BACKEND
+	url = https://github.com/houdLaou/SAHLA_FARM_PROJECT_BACKEND.git
